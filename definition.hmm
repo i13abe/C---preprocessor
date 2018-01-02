@@ -1,0 +1,24 @@
+
+
+struct reflist{
+  reflist next;
+  int nchar;
+  int argn;
+};
+
+
+struct definition{
+  char[] name;
+  int narg;
+  char[] mdefinition;
+  reflist pattern;
+};
+
+public definition[] deftable;
+
+public char[] replacedef(char[] macro,char[][] arg);
+public int searchdef(char[] macro);
+public int makemacro(char[] macro,int narg);
+public int deletedef(char[] macro);
+public int makelist(char[] macro,int argn,int nchar);
+public int makedef(char[] macro,char[] def);

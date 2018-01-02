@@ -1,0 +1,821 @@
+#include <stdio.hmm>
+#include <stdlib.hmm>
+#include <string.hmm>
+#include <ctype.hmm>
+#include "type.hmm"
+#include "definition.hmm"
+#include "including.hmm"
+
+#define INPUTSIZE 50
+#define ARGSIZE 10         //マクロの引数数。内一つはnull用
+#define TABLESIZE 20
+#define INDEPTHSIZE 10
+#define INCLUDENAME 20
+
+public definition[] deftable=array(TABLESIZE);
+public filelist[] incdepth=array(INDEPTHSIZE);
+FILE fd;
+boolean eofflag=false;
+char[] ipbuf=array(INPUTSIZE);
+char[] word;
+int isp=0;
+int byte=0;
+int linenum=1;
+
+
+
+int enterlcnt=0;         //改行の数
+char nextlch='\0';      //getL()用の次文字
+// \\nを無視する１文字入力
+char getL(){
+  char lch;
+  if(nextlch!='\0' && nextlch!='\\'){
+    lch=nextlch;
+    nextlch='\0';
+    return lch;
+  }
+  if(nextlch=='\\'){
+    lch='\\';
+  }
+  else{
+    lch=fgetc(fd);
+    byte=byte+sizeof(char);
+  }
+
+  while(lch=='\\'){
+    if(!feof(fd)){
+      nextlch=fgetc(fd);
+      byte=byte+sizeof(char);
+    }
+    else{
+      eofflag=true;
+      return '\n';
+    }
+    if(nextlch=='\n'){
+      if(!feof(fd))
+        do{
+          lch=fgetc(fd);
+          byte=byte+sizeof(char);
+          if(feof(fd))
+            return '\n';
+        }while(lch==' ');
+      else{
+        eofflag=true;
+        return '\n';
+      }
+      enterlcnt=enterlcnt+1;
+      nextlch='\0';
+    }
+    else
+      return '\\';
+  }
+  return lch;
+}
+
+
+
+int enterhcnt=0;        //改行の数
+char nexthch='\0';      //getH()用の次文字
+boolean sentense=false;
+// コメントを削除する１文字入力
+char getH(){
+  char hch;
+  int commentflag=0;
+
+  if(nexthch!='\0'){
+    hch=nexthch;
+    nexthch='\0';
+    return hch;
+  }
+
+  hch=getL();
+
+  //'x'または"..."の時
+  if(hch=='\"'){
+    if(!sentense){
+      sentense=true;
+      return hch;
+    }
+    else{
+      sentense=false;
+      return hch;
+    }
+  }
+
+  if(hch=='\n' && sentense){
+    sentense=false;
+    return hch;
+  }
+
+
+  if(sentense)
+    return hch;
+
+
+  //最初に'/'を見つけた
+  while(hch=='/'){
+    nexthch=getL();
+    if(eofflag)
+      break;
+
+    //次の文字が'/'だった
+    if(nexthch=='/'){
+      nexthch='\0';
+      while(hch!='\n'){
+        hch=getL();
+        if(eofflag)
+          return '\n';
+      }
+      enterhcnt=enterhcnt+1;
+    }
+
+    //次の文字が'*'だった
+    else if(nexthch=='*'){
+      nexthch='\0';
+      commentflag=1;
+      while(commentflag==1){
+        while(hch!='*'){
+          if(hch=='\n')
+            enterhcnt=enterhcnt+1;
+          hch=getL();
+          if(eofflag){
+
+            printf("コメントエラー\n");
+            return '\n';
+          }
+        }
+        hch=getL();
+        if(eofflag){
+
+          printf("コメントエラー\n");
+          return '\n';
+        }
+        if(hch=='/')
+           commentflag=0;
+      }
+    }
+
+    //次の文字がただの文字だった
+    else
+      return hch;
+
+    hch=getL();
+    if(eofflag)
+      return hch;
+  }
+  return hch;
+}
+
+
+
+char nextwch='\0';        //次の文字を取得する
+boolean wordflag=false;   //今の文字と次の文字がアルファベットならtrue
+boolean wordspace=false;  //次の文字が' 'になった時true
+boolean wordpunc=false;   //次の文字が','になった時true
+boolean linehead=true;    //行の先頭ならtrue
+int parentdepth=0;        //'()'の深さ
+//今の文字と次の文字を同時にとり、記号と単語を分ける
+//返り値は今の文字だが呼び出した関数は主にフラグをみる
+char getWord(){
+  char wch;     //今の文字
+
+  //次の文字が空でなかったら今の文字に入れる
+  if(nextwch!='\0'){
+    wch=nextwch;
+    nextwch='\0';
+  }
+
+  //次の文字が空だったら今の文字を取得
+  else{
+    wch=getH();
+  }
+
+  nextwch=getH();   //次の文字取得
+
+
+  //次の文字が'('ならインクリメント
+  if(nextwch=='('){
+    parentdepth=parentdepth+1;
+  }
+
+  //次の文字が')'ならデクリメント
+  else if(nextwch==')'){
+    parentdepth=parentdepth-1;
+  }
+
+  //次の文字が','ならフラグをオン
+  else if(nextwch==','){
+    wordpunc=true;
+  }
+
+  //今の文字が 0~9 a~z A~Z '.'のどれかか
+  if(isAlnum(wch) || wch=='.'){
+    linehead=false;       //行の先頭フラグをオン
+    wordflag=true;        //単語であるのでフラグをオン
+
+    //次の文字が記号なら
+    if(!isAlnum(nextwch) && nextwch!='.'){
+      wordflag=false;     //フラグをオフ
+    }
+  }
+
+  //今の文字が','ならフラグをオフ
+  else if(wch==','){
+    linehead=false;
+    wordpunc=false;
+  }
+
+  //今の文字が' 'なら
+  else if(wch==' '){
+    //行の先頭ならそのまま' 'を返す
+    if(linehead){
+      wordspace=false;
+        return wch;
+    }
+
+    //フラグがオンなら１つだけ' 'を返して他の' 'は飛ばす
+    else if(wordspace){
+      wordspace=false;
+      while(nextwch==' ')
+        nextwch=getH();
+      return wch;
+    }
+  }
+
+  //今の文字が記号ならフラグをオフ
+  else{
+    linehead=false;
+    wordflag=false;
+  }
+
+  //次の文字が' 'ならフラグをオン
+  if(nextwch==' ')
+    wordspace=true;
+
+  return wch;
+}
+
+
+
+//コメントまたは\\n時の改行の数だけ改行する
+//返り値はipbufの位置
+int entercount(){
+  int i;
+  for(i=0;i<(enterhcnt+enterlcnt);i=i+1){
+    ipbuf[i]='\n';
+  }
+  enterlcnt=0;
+  enterhcnt=0;
+  return i;
+}
+
+
+boolean lexflag=false;
+//字句解析
+int lexical(){
+  int bufn=0;                   //現在文字位置
+  int wordn=0;                   //単語の位置
+  char buf;                     //入力文字
+
+  word=malloc(sizeof(char)*INPUTSIZE);
+
+
+  buf=getWord();
+
+  //スペースか改行か記号まで文字を取り出す
+  //ただし'.'は含めておく
+  while(wordflag || sentense){
+    ipbuf[bufn]=buf;
+    word[wordn]=buf;
+    bufn=bufn+1;
+    wordn=wordn+1;
+    buf=getWord();
+  }
+
+  //改行で終わったなら行先頭フラグを立てる
+  if(buf=='\n'){
+    linenum=linenum+1+enterhcnt+enterlcnt;
+    bufn=entercount();
+    linehead=true;
+    if(parentdepth!=0)
+      return T_ERROR;
+  }
+
+
+  ipbuf[bufn]=buf;
+  bufn=bufn+1;
+  ipbuf[bufn]='\0';
+  word[wordn]=buf;
+  wordn=wordn+1;
+  word[wordn]='\0';
+
+  int wordlen=strLen(word);
+
+  //字句解析
+  if(lexflag){
+    if(strCmp(word,"Edefine")==0){
+      return T_EDEFINE;
+    }
+    else if(strCmp(word,"Sdefine")==0){
+      return T_SDEFINE;
+    }
+    else if(strCmp(word,"include")==0){
+      return T_INCLUDE;
+    }
+    else if(strCmp(word,"else")==0){
+      return T_ELSE;
+    }
+    else if(strCmp(word,"ifdef")==0){
+      return T_IFDEF;
+    }
+    else if(strCmp(word,"ifndef")==0){
+      return T_IFNDEF;
+    }
+    else if(strCmp(word,"elseifdef")==0){
+      return T_ELSEIFDEF;
+    }
+    else if(strCmp(word,"elseifndef")==0){
+      return T_ELSEIFNDEF;
+    }
+    else if(strCmp(word,"endif")==0){
+      return T_ENDIF;
+    }
+    else if(strCmp(word,"undef")==0){
+      return T_UNDEF;
+    }
+  }
+
+  if(word[0]=='\'' && word[wordlen-1]=='\''){
+    return T_MOJI;
+  }
+  else if(word[0]=='\"' && word[wordlen-1]=='\"'){
+    return T_MOJI;
+  }
+  return T_OTHER;
+}
+
+
+int skipspace(){
+  int type;
+  lexical();
+  while(strCmp(word," ")==0)
+    type=lexical();
+  return type;
+}
+
+
+//(x,y)とかの引数の取り出し
+//返り値は引数
+int narg;     //引数数
+char[][] getArg(){
+  char[][] args;      //引数を持つ配列
+  char[] arg;         //引数の文字
+  narg=0;             //引数の数
+  int endparent;      //引数の終わり位置
+
+  //'('がないなら終わり位置は0
+  if(parentdepth==0)
+    endparent=0;
+  //'('があったら1つ減らして値を持つ
+  //'('が複数回呼ばれている時用に1減らす
+  else
+    endparent=parentdepth-1;
+
+  args=malloc(sizeof(char[])*ARGSIZE);
+
+  while(parentdepth!=endparent){
+    arg=malloc(sizeof(char)*ARGSIZE);
+    lexical();
+    while(word[0]=='(' || word[0]==',' ||word[0]==')')
+      lexical();
+    arg=strCat(arg,word);
+    while(!wordpunc && parentdepth!=endparent){
+      lexical();
+      arg=strCat(arg,word);
+    }
+    args[narg]=arg;
+    narg=narg+1;
+  }
+
+  if(narg!=0)
+    lexical();
+
+  args[narg]=null;
+  return args;
+}
+
+
+
+//定義本体の取得
+//定義本体の引数の位置やマクロ名の入子を処理する
+//返り値は定義本体
+char[] getDef(char[] mname,char[][] arg){
+  char[] buffer=malloc(sizeof(char)*INPUTSIZE);
+  int wordn=0;          //単語の出現番号、引数の出現時に使う
+  char[] submacro;      //途中で見つけたマクロ名を保持
+  char[][] subarg;      //定義本体中のマクロの引数
+  int subnarg=narg;     //引数数を保持
+
+  skipspace();
+
+  while(word[0]!='\n'){
+
+    //引数と同じならリストに登録
+    int i=0;
+    for(i=0;i<subnarg;i=i+1){
+      if(strCmp(arg[i],word)==0){
+        if(makelist(mname,i,wordn)==-1)
+          return null;
+      }
+    }
+
+    //引数でないならマクロ名かどうかを比較
+    if(i==subnarg){
+      int n=searchdef(word);
+      if(n!=-1){
+        submacro=word;
+        if(deftable[n].narg==0){
+          subarg=malloc(sizeof(char[])*1);
+          subarg[0]=null;
+        }
+        else{
+          subarg=getArg();
+        }
+        ipbuf=replacedef(submacro,subarg);
+      }
+    }
+
+    buffer=strCat(buffer,ipbuf);
+    lexical();
+    wordn=wordn+1;
+  }
+  buffer=strCat(buffer,"\0");
+  return buffer;
+}
+
+
+
+
+//マクロ名を登録する前の前処理
+//返り値はマクロの引数の多次元配列
+char[] macroname;
+char[][] do_makeMname(){
+  int type=0;   //文字タイプ
+  char[][] args;
+
+  //マクロの定義ができずに終了
+  if(feof(fd))
+    return null;
+
+  type=skipspace();
+  macroname=word;
+
+
+  //文字タイプがただの文字かどうか
+  if(type==T_OTHER){
+    //マクロ名の最初の文字がアルファベットかどうか
+    if(isAlpha(word[0])){
+      args=getArg();           //引数の配列
+      int i=0;
+      for(i=0;i<narg;i=i+1){
+        //引数の最初の文字がアルファベットかどうか
+        if(!isAlpha(args[i][0]))
+          //引数名不可
+          return null;
+      }
+
+      if(makemacro(macroname,narg)==-1) //マクロ名の登録
+        return null;
+    }
+    else{
+      //アルファベットから始まらないマクロ名不可
+      return null;
+    }
+  }
+  else{
+    //特殊なマクロ名不可
+    return null;
+  }
+  return args;
+}
+
+
+//#Edefineを見つけた
+int do_Edefine(){
+  char[][] args;               //引数
+
+  args=do_makeMname();
+  if(args==null)
+    return -1;
+
+  char[] def=malloc(sizeof(char)*INPUTSIZE);  //定義本体用バッファ
+
+
+  def=getDef(macroname,args);             //定義本体取り出し
+  if(def==null)         //定義本体がないなら
+    return -1;
+
+  int i=0;
+  int cnt=1;
+  if(def[0]=='('){
+    for(i=1;def[i]!='\0';i=i+1){
+      if(def[i]=='(')
+        cnt=cnt+1;
+      else if(def[i]==')')
+        cnt=cnt-1;
+
+      if(cnt==0)
+        break;
+    }
+    if(def[i+1]!='\0')
+      return -1;
+  }
+  else
+    return -1;
+
+  if(makedef(macroname,def)==-1)  //定義本体の登録
+    return -1;
+  return 0;
+}
+
+
+
+int do_Sdefine(){
+  char[][] args;
+  args=do_makeMname();
+  if(args==null)
+    return -1;
+
+  char[] def=malloc(sizeof(char)*INPUTSIZE);  //定義本体用バッファ
+
+  def=getDef(macroname,args);             //定義本体取り出し
+  if(def==null)         //定義本体がないなら
+    return -1;
+
+  if(makedef(macroname,def)==-1)  //定義本体の登録
+    return -1;
+  return 0;
+}
+
+int do_undef(){
+  skipspace();
+  if(deletedef(word)==-1)
+    return -1;
+  return 0;
+}
+
+
+
+int do_include(){
+  int type;
+  char[] includename=malloc(sizeof(char)*INCLUDENAME);
+
+  type=skipspace();
+
+  if(type==T_MOJI){
+    int i=0;
+    for(i=1;word[i]!='\"';i=i+1)
+      includename[i-1]=word[i];
+  }
+  else if(word[0]=='<'){
+    lexical();
+    while(word[0]!='>'){
+      includename=strCat(includename,word);
+      lexical();
+    }
+  }
+  saveincdepth(linenum,byte);
+  isp=makeincdepth(includename);
+  fd=fopen(incdepth[isp].name,"r");
+  return 0;
+}
+
+
+
+#define IFDEPTH 10
+int[] ifdepth=array(IFDEPTH);
+int sp=0;
+
+int conditioncheck(){
+  skipspace();
+  int n=searchdef(word);
+  if(n>-1)
+    return 1;
+  return 0;
+}
+
+int do_ifdef(int con){
+  if(ifdepth[sp]==1){
+    sp=sp+1;
+    if(con==1){
+      ifdepth[sp]=1;
+    }
+    else{
+      ifdepth[sp]=0;
+    }
+  }
+  else{
+    sp=sp+1;
+    ifdepth[sp]=0;
+  }
+  return 0;
+}
+
+int do_else(){
+  if(ifdepth[sp-1]==1){
+    if(ifdepth[sp]==1){
+      ifdepth[sp]=0;
+    }
+    else{
+      ifdepth[sp]=1;
+    }
+  }
+  else{
+    ifdepth[sp]=0;
+  }
+  return 0;
+}
+
+int do_ifndef(int con){
+  if(ifdepth[sp]==1){
+    sp=sp+1;
+    if(con==0){
+      ifdepth[sp]=1;
+    }
+    else{
+      ifdepth[sp]=0;
+    }
+  }
+  else{
+    sp=sp+1;
+    ifdepth[sp]=0;
+  }
+  return 0;
+}
+
+int do_elseifdef(int con){
+  if(ifdepth[sp-1]==1){
+    if(ifdepth[sp]==1){
+      ifdepth[sp]=0;
+    }
+    else{
+      if(con==1){
+        ifdepth[sp]=1;
+        ifdepth[sp-1]=0;
+      }
+      else{
+        ifdepth[sp]=0;
+      }
+    }
+  }
+  else{
+    ifdepth[sp]=0;
+  }
+  return 0;
+}
+
+int do_elseifndef(int con){
+  if(ifdepth[sp-1]==1){
+    if(ifdepth[sp]==1){
+      ifdepth[sp]=0;
+    }
+    else{
+      if(con==0){
+        ifdepth[sp]=1;
+        ifdepth[sp-1]=0;
+      }
+      else{
+        ifdepth[sp]=0;
+      }
+    }
+  }
+  else{
+    ifdepth[sp]=0;
+  }
+  return 0;
+}
+
+int do_endif(){
+  ifdepth[sp]=0;
+  sp=sp-1;
+  return 0;
+}
+
+
+public int main(int argc,char[][] argv){
+  isp=makedepth(argv[1],linenum,byte);
+  fd=fopen(incdepth[isp].name,"r");
+
+  int type;
+  int condition;
+  char[]  submacro;
+  char[][] subarg;
+  ifdepth[sp]=1;    //ifdepthの最初は常に１
+
+  while(!feof(fd)){
+    type=lexical();
+
+    if(ifdepth[sp]==1){
+      if(type==T_OTHER || type==T_MOJI){
+        if(lexflag){
+          putchar('#');
+          int i=0;
+          for(i=0;ipbuf[i]!='\0';i=i+1)
+            putchar(ipbuf[i]);
+          lexflag=false;
+          continue;
+        }
+        if(word[0]=='#'){
+          lexflag=true;
+          continue;
+        }
+
+        int n=searchdef(word);
+        if(n!=-1){
+          submacro=word;
+          if(deftable[n].narg==0){
+            subarg=null;
+          }
+          else{
+            subarg=getArg();
+          }
+          ipbuf=replacedef(submacro,subarg);
+        }
+        int i=0;
+        for(i=0;ipbuf[i]!='\0';i=i+1)
+          putchar(ipbuf[i]);
+      }
+      else if(type==T_EDEFINE){
+        lexflag=false;
+        putchar('\n');
+        do_Edefine();
+      }
+      else if(type==T_SDEFINE){
+        lexflag=false;
+        putchar('\n');
+        do_Sdefine();
+      }
+      else if(type==T_UNDEF){
+        lexflag=false;
+        putchar('\n');
+        do_undef();
+      }
+      else if(type==T_INCLUDE){
+        lexflag=false;
+        do_include();
+      }
+    }
+    else{
+      lexflag=false;
+      if(strCmp(word,"\n")==0)
+        putchar('\n');
+    }
+
+    if(type==T_IFDEF){
+      lexflag=false;
+      putchar('\n');
+      condition=conditioncheck();
+      do_ifdef(condition);
+    }
+    else if(type==T_ELSE){
+      lexflag=false;
+      putchar('\n');
+      do_else();
+    }
+    else if(type==T_IFNDEF){
+      lexflag=false;
+      putchar('\n');
+      condition=conditioncheck();
+      do_ifndef(condition);
+    }
+    else if(type==T_ELSEIFDEF){
+      lexflag=false;
+      putchar('\n');
+      condition=conditioncheck();
+      do_elseifdef(condition);
+    }
+    else if(type==T_ELSEIFNDEF){
+      lexflag=false;
+      putchar('\n');
+      condition=conditioncheck();
+      do_elseifndef(condition);
+    }
+    else if(type==T_ENDIF){
+      lexflag=false;
+      putchar('\n');
+      do_endif();
+    }
+
+    if(feof(fd) && isp!=0){
+      isp=deleteincdepth(incdepth[isp].name);
+      fd=fopen(incdepth[isp].name,"r");
+
+      //seek
+
+
+    }
+  }
+
+  fclose(fd);
+  return 0;
+}

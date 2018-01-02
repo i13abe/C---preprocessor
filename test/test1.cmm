@@ -1,0 +1,18 @@
+#include <stdio.hmm>
+#include <stdlib.hmm>
+#define M 100
+
+char[] a=array(M);
+
+public char[] String(){
+  char[] b=malloc(sizeof(char)*M);
+  b="aaa";
+  return b;
+}
+
+
+public int main(int argc,char[][] argv){
+  a=String();
+  puts(a);
+  return 0;
+}

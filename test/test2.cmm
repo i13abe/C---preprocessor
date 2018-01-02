@@ -1,0 +1,329 @@
+#include <stdio.hmm>
+#include <stdlib.hmm>
+#include <string.hmm>
+#include <ctype.hmm>
+#include "../type.hmm"
+
+#define INPUTSIZE 50
+
+FILE fd;
+boolean eofflag=false;
+char[] ipbuf=array(INPUTSIZE);
+char[] word;
+
+
+int enterlcnt=0;         //改行の数
+char nextlch='\0';      //getL()用の次文字
+// \\nを無視する１文字入力
+char getL(){
+  char lch;
+  if(nextlch!='\0' && nextlch!='\\'){
+    lch=nextlch;
+    nextlch='\0';
+    return lch;
+  }
+  if(nextlch=='\\')
+    lch='\\';
+  else
+    lch=fgetc(fd);
+  while(lch=='\\'){
+    if(!feof(fd))
+      nextlch=fgetc(fd);
+    else{
+      eofflag=true;
+      return '\n';
+    }
+    if(nextlch=='\n'){
+      if(!feof(fd))
+        do{
+          lch=fgetc(fd);
+          if(feof(fd))
+            return '\n';
+        }while(lch==' ');
+      else{
+        eofflag=true;
+        return '\n';
+      }
+      enterlcnt=enterlcnt+1;
+      nextlch='\0';
+    }
+    else
+      return '\\';
+  }
+  return lch;
+}
+
+
+
+int enterhcnt=0;        //改行の数
+char nexthch='\0';      //getH()用の次文字
+boolean sentense=false;
+// コメントを削除する１文字入力
+char getH(){
+  char hch;
+  int commentflag=0;
+
+  if(nexthch!='\0'){
+    hch=nexthch;
+    nexthch='\0';
+    return hch;
+  }
+
+  hch=getL();
+
+  //'x'または"..."の時
+  if(hch=='\"'){
+    if(!sentense){
+      sentense=true;
+      return hch;
+    }
+    else{
+      sentense=false;
+      return hch;
+    }
+  }
+
+  if(hch=='\n' && sentense){
+    sentense=false;
+    return hch;
+  }
+
+
+  if(sentense)
+    return hch;
+
+
+  //最初に'/'を見つけた
+  while(hch=='/'){
+    nexthch=getL();
+    if(eofflag)
+      break;
+
+    //次の文字が'/'だった
+    if(nexthch=='/'){
+      nexthch='\0';
+      while(hch!='\n'){
+        hch=getL();
+        if(eofflag)
+          return '\n';
+      }
+      enterhcnt=enterhcnt+1;
+    }
+
+    //次の文字が'*'だった
+    else if(nexthch=='*'){
+      nexthch='\0';
+      commentflag=1;
+      while(commentflag==1){
+        while(hch!='*'){
+          if(hch=='\n')
+            enterhcnt=enterhcnt+1;
+          hch=getL();
+          if(eofflag){
+
+            printf("コメントエラー\n");
+            return '\n';
+          }
+        }
+        hch=getL();
+        if(eofflag){
+
+          printf("コメントエラー\n");
+          return '\n';
+        }
+        if(hch=='/')
+           commentflag=0;
+      }
+    }
+
+    //次の文字がただの文字だった
+    else
+      return hch;
+
+    hch=getL();
+    if(eofflag)
+      return hch;
+  }
+  return hch;
+}
+
+
+//記号かアルファベットかで分けて返す
+//a~z A~Z '.' '#'は連続して返す、記号 ' ' '\n'は区切って返す
+
+char nextwch='\0';
+boolean wordflag=false;
+boolean wordspace=false;
+boolean wordpunc=false;
+boolean linehead=true;
+int parentdepth=0;
+char getWord(){
+  char wch;
+
+  if(nextwch!='\0'){
+    wch=nextwch;
+    nextwch='\0';
+  }
+  else{
+    wch=getH();
+  }
+  nextwch=getH();
+
+
+
+  if(nextwch=='('){
+    parentdepth=parentdepth+1;
+  }
+  else if(nextwch==')'){
+    parentdepth=parentdepth-1;
+  }
+  else if(nextwch==','){
+    wordpunc=true;
+  }
+
+
+  if(isAlnum(wch) || wch=='#' || wch=='.'){
+    linehead=false;
+    wordflag=true;
+    if(!isAlnum(nextwch) && nextwch!='#' && nextwch!='.'){
+      wordflag=false;
+    }
+  }
+  else if(wch==','){
+    linehead=false;
+    wordpunc=false;
+  }
+  else if(wch==' '){
+    if(linehead){
+      wordspace=false;
+        return wch;
+    }
+    else if(wordspace){
+      wordspace=false;
+      while(nextwch==' ')
+        nextwch=getH();
+      return wch;
+    }
+  }
+  else{
+    linehead=false;
+    wordflag=false;
+  }
+
+  if(nextwch==' ')
+    wordspace=true;
+
+  return wch;
+}
+
+
+
+//コメントまたは\\n時の改行の数だけ改行する
+//返り値はipbufの位置
+int entercount(){
+  int i;
+  for(i=0;i<(enterhcnt+enterlcnt);i=i+1){
+    ipbuf[i]='\n';
+  }
+  enterlcnt=0;
+  enterhcnt=0;
+  return i;
+}
+
+
+//字句解析
+int lexical(){
+  int bufn=0;                   //現在文字位置
+  int wordn=0;                   //単語の位置
+  char buf;                     //入力文字
+
+  word=malloc(sizeof(char)*INPUTSIZE);
+
+  buf=getWord();
+
+  //スペースか改行か記号まで文字を取り出す
+  //ただし'#'と'.'は含めておく
+  while(wordflag || sentense){
+    ipbuf[bufn]=buf;
+    word[wordn]=buf;
+    bufn=bufn+1;
+    wordn=wordn+1;
+    buf=getWord();
+  }
+
+  //改行で終わったなら行先頭フラグを立てる
+  if(buf=='\n'){
+    bufn=entercount();
+    linehead=true;
+    if(parentdepth!=0)
+      return T_ERROR;
+  }
+
+
+  ipbuf[bufn]=buf;
+  bufn=bufn+1;
+  ipbuf[bufn]='\0';
+  word[wordn]=buf;
+  wordn=wordn+1;
+  word[wordn]='\0';
+
+  int wordlen=strLen(word);
+
+  //字句解析
+  if(strCmp(word,"#Edefine")==0){
+    return T_EDEFINE;
+  }
+  else if(strCmp(word,"#Sdefine")==0){
+    return T_SDEFINE;
+  }
+  else if(strCmp(word,"#include")==0){
+    return T_INCLUDE;
+  }
+  else if(strCmp(word,"#else")==0){
+    return T_ELSE;
+  }
+  else if(strCmp(word,"#ifdef")==0){
+    return T_IFDEF;
+  }
+  else if(strCmp(word,"#ifndef")==0){
+    return T_IFNDEF;
+  }
+  else if(strCmp(word,"#elseifdef")==0){
+    return T_ELSEIFDEF;
+  }
+  else if(strCmp(word,"#elseifndef")==0){
+    return T_ELSEIFNDEF;
+  }
+  else if(strCmp(word,"#endif")==0){
+    return T_ENDIF;
+  }
+  else if(strCmp(word,"#undef")==0){
+    return T_UNDEF;
+  }
+  else if(word[0]=='\'' && word[wordlen-1]=='\''){
+    return T_MOJI;
+  }
+  else if(word[0]=='\"' && word[wordlen-1]=='\"'){
+    return T_MOJI;
+  }
+  return T_OTHER;
+}
+
+
+public int main(int argc,char[][] argv){
+  fd=fopen(argv[1],"r");
+  int type;
+  //char c;
+  while(!feof(fd)){
+    type=lexical();
+
+    int i=0;
+    if(type==T_OTHER || type==T_MOJI)
+      for(i=0;ipbuf[i]!='\0';i=i+1)
+        putchar(ipbuf[i]);
+
+
+  }
+  fclose(fd);
+  return 0;
+}

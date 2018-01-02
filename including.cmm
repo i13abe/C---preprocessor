@@ -1,0 +1,29 @@
+#include "including.hmm"
+#include <stdlib.hmm>
+#include <string.hmm>
+
+int ifsp=-1;
+
+public int saveincdepth(int linenum,int byte){
+  incdepth[ifsp].linen=linenum;
+  incdepth[ifsp].dbyte=byte;
+  return ifsp;
+}
+
+public int makeincdepth(char[] fname){
+  ifsp=ifsp+1;
+  incdepth[ifsp]=malloc(sizeof(filelist));
+  incdepth[ifsp].name=fname;
+  incdepth[ifsp].linen=0;
+  incdepth[ifsp].dbyte=0;
+  return ifsp;
+}
+
+public int deleteincdepth(char[] fname){
+  if(strCmp(fname,incdepth[ifsp].name)==0){
+    free(incdepth[ifsp]);
+    ifsp=ifsp-1;
+    return ifsp;
+  }
+  return -1;
+}

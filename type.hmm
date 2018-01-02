@@ -1,0 +1,15 @@
+
+//字句解析時に使用する#以降のタイプ
+#define T_EDEFINE 1
+#define T_SDEFINE 2
+#define T_INCLUDE 3
+#define T_ELSE 4
+#define T_IFDEF 5
+#define T_IFNDEF 6
+#define T_ELSEIFDEF 7
+#define T_ELSEIFNDEF 8
+#define T_ENDIF 9
+#define T_UNDEF 10
+#define T_ERROR 11
+#define T_OTHER 12
+#define T_MOJI 13

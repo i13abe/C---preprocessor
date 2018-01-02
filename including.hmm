@@ -1,0 +1,13 @@
+
+
+struct filelist{
+  char[] name;
+  int linen;
+  int dbyte;
+};
+
+public filelist[] incdepth;
+
+public int saveincdepth(int linenum,int byte);
+public int makeincdepth(char[] fname);
+public int deleteincdepth(char[] fname);
