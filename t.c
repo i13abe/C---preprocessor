@@ -1,4 +1,4 @@
-#include "stdio.hmm"
+#include "definition.hmm"
 
 #define A (a+a)
 #define AA(a) (a+A)
