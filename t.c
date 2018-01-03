@@ -1,9 +1,9 @@
-#include "definition.hmm"
+#include "including.hmm"
 
-#define A (a+a)
-#define AA(a) (a+A)
-#define B(b) text##b
-#define PF(p,f) #p,f
+#Edefine A (a+a)
+#Edefine AA(a) (a+A)
+#Edefine B(b) text##b
+#Edefine PF(p,f) #p,f
 
 int main(){
   int a=AA(1);

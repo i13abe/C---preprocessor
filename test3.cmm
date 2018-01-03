@@ -22,6 +22,28 @@ int isp=0;
 int byte=0;
 int linenum=1;
 
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
+int fseek(FILE stream,int offset,int whence){
+  if(whence==SEEK_SET){
+    stream.cnt=offset;
+    return 0;
+  }
+  else if(whence==SEEK_CUR){
+    stream.cnt=stream.cnt+offset;
+    return 0;
+  }
+  else if(whence==SEEKEND){
+    return 0;
+  }
+
+  return -1;
+
+}
+
+
 
 
 int enterlcnt=0;         //改行の数
@@ -32,6 +54,7 @@ char getL(){
   if(nextlch!='\0' && nextlch!='\\'){
     lch=nextlch;
     nextlch='\0';
+    byte=byte+sizeof(char);
     return lch;
   }
   if(nextlch=='\\'){
@@ -45,20 +68,23 @@ char getL(){
   while(lch=='\\'){
     if(!feof(fd)){
       nextlch=fgetc(fd);
-      byte=byte+sizeof(char);
     }
     else{
       eofflag=true;
       return '\n';
     }
     if(nextlch=='\n'){
-      if(!feof(fd))
+      linenum=linenum+1;
+      if(!feof(fd)){
         do{
           lch=fgetc(fd);
           byte=byte+sizeof(char);
-          if(feof(fd))
+          if(feof(fd)){
+            eofflag=true;
             return '\n';
+          }
         }while(lch==' ');
+      }
       else{
         eofflag=true;
         return '\n';
@@ -67,8 +93,11 @@ char getL(){
       nextlch='\0';
     }
     else
-      return '\\';
+      return lch;
   }
+  if(lch=='\n')
+    linenum=linenum+1;
+
   return lch;
 }
 
@@ -294,7 +323,6 @@ int lexical(){
 
   //改行で終わったなら行先頭フラグを立てる
   if(buf=='\n'){
-    linenum=linenum+1+enterhcnt+enterlcnt;
     bufn=entercount();
     linehead=true;
     if(parentdepth!=0)
@@ -809,10 +837,7 @@ public int main(int argc,char[][] argv){
     if(feof(fd) && isp!=0){
       isp=deleteincdepth(incdepth[isp].name);
       fd=fopen(incdepth[isp].name,"r");
-
-      //seek
-
-
+      fseek(fd,byte,SEEK_SET);
     }
   }
 

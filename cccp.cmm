@@ -81,26 +81,37 @@ char getL(){
   if(nextlch!='\0' && nextlch!='\\'){
     lch=nextlch;
     nextlch='\0';
+    byte=byte+sizeof(char);
     return lch;
   }
-  if(nextlch=='\\')
+  if(nextlch=='\\'){
     lch='\\';
-  else
+  }
+  else{
     lch=fgetc(fd);
+    byte=byte+sizeof(char);
+  }
+
   while(lch=='\\'){
-    if(!feof(fd))
+    if(!feof(fd)){
       nextlch=fgetc(fd);
+    }
     else{
       eofflag=true;
       return '\n';
     }
     if(nextlch=='\n'){
-      if(!feof(fd))
+      linenum=linenum+1;
+      if(!feof(fd)){
         do{
           lch=fgetc(fd);
-          if(feof(fd))
+          byte=byte+sizeof(char);
+          if(feof(fd)){
+            eofflag=true;
             return '\n';
+          }
         }while(lch==' ');
+      }
       else{
         eofflag=true;
         return '\n';
@@ -109,8 +120,11 @@ char getL(){
       nextlch='\0';
     }
     else
-      return '\\';
+      return lch;
   }
+  if(lch=='\n')
+    linenum=linenum+1;
+
   return lch;
 }
 
@@ -335,7 +349,6 @@ int lexical(){
 
   //改行で終わったなら行先頭フラグを立てる
   if(buf=='\n'){
-    linenum=linenum+1;
     bufn=entercount();
     linehead=true;
     if(parentdepth!=0)
