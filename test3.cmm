@@ -22,29 +22,6 @@ int isp=0;
 int byte=0;
 int linenum=1;
 
-#define SEEK_SET 0
-#define SEEK_CUR 1
-#define SEEK_END 2
-
-int fseek(FILE stream,int offset,int whence){
-  if(whence==SEEK_SET){
-    stream.cnt=offset;
-    return 0;
-  }
-  else if(whence==SEEK_CUR){
-    stream.cnt=stream.cnt+offset;
-    return 0;
-  }
-  else if(whence==SEEKEND){
-    return 0;
-  }
-
-  return -1;
-
-}
-
-
-
 
 int enterlcnt=0;         //改行の数
 char nextlch='\0';      //getL()用の次文字
@@ -118,23 +95,6 @@ char getH(){
   }
 
   hch=getL();
-
-  //'x'または"..."の時
-  if(hch=='\"'){
-    if(!sentense){
-      sentense=true;
-      return hch;
-    }
-    else{
-      sentense=false;
-      return hch;
-    }
-  }
-
-  if(hch=='\n' && sentense){
-    sentense=false;
-    return hch;
-  }
 
 
   if(sentense)
@@ -271,6 +231,14 @@ char getWord(){
     }
   }
 
+  //今の文字が'\"'なら
+  else if(wch=='\"'){
+    if(!sentense)
+      sentense=true;
+    else
+      sentense=false;
+  }
+
   //今の文字が記号ならフラグをオフ
   else{
     linehead=false;
@@ -324,6 +292,7 @@ int lexical(){
   //改行で終わったなら行先頭フラグを立てる
   if(buf=='\n'){
     bufn=entercount();
+    sentense=false;
     linehead=true;
     if(parentdepth!=0)
       return T_ERROR;
@@ -412,15 +381,16 @@ char[][] getArg(){
   args=malloc(sizeof(char[])*ARGSIZE);
 
   while(parentdepth!=endparent){
-    arg=malloc(sizeof(char)*ARGSIZE);
     lexical();
-    while(word[0]=='(' || word[0]==',' ||word[0]==')')
+    while(word[0]=='(' || word[0]==',' || word[0]==')')
       lexical();
-    arg=strCat(arg,word);
+    arg=malloc(sizeof(char)*ARGSIZE);
+    arg=strCpy(arg,word);
     while(!wordpunc && parentdepth!=endparent){
       lexical();
       arg=strCat(arg,word);
     }
+    arg=strCat(arg,"\0");
     args[narg]=arg;
     narg=narg+1;
   }
@@ -599,7 +569,6 @@ int do_include(){
   char[] includename=malloc(sizeof(char)*INCLUDENAME);
 
   type=skipspace();
-
   if(type==T_MOJI){
     int i=0;
     for(i=1;word[i]!='\"';i=i+1)
@@ -615,6 +584,8 @@ int do_include(){
   saveincdepth(linenum,byte);
   isp=makeincdepth(includename);
   fd=fopen(incdepth[isp].name,"r");
+  byte=0;
+  linenum=0;
   return 0;
 }
 
@@ -731,7 +702,7 @@ int do_endif(){
 
 
 public int main(int argc,char[][] argv){
-  isp=makedepth(argv[1],linenum,byte);
+  isp=makeincdepth(argv[1]);
   fd=fopen(incdepth[isp].name,"r");
 
   int type;
@@ -837,7 +808,7 @@ public int main(int argc,char[][] argv){
     if(feof(fd) && isp!=0){
       isp=deleteincdepth(incdepth[isp].name);
       fd=fopen(incdepth[isp].name,"r");
-      fseek(fd,byte,SEEK_SET);
+      fseek(fd,incdepth[isp].dbyte,0);
     }
   }
 

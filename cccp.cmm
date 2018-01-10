@@ -8,9 +8,9 @@
 
 #define INPUTSIZE 50      //単語のマックスサイズ
 #define ARGSIZE 5         //マクロの引数数。内一つはnull用
-#define TABLESIZE 20
-#define INDEPTHSIZE 10
-#define INCLUDENAME 20
+#define TABLESIZE 20      //definitionテーブルのサイズ
+#define INDEPTHSIZE 10    //includeの入れ子サイズ
+#define INCLUDENAME 20    //includeのファイル名の大きさ
 #define IFDEPTH 10        //ifの入れ子の深さ
 
 
@@ -77,34 +77,51 @@ int enterlcnt=0;         //改行の数
 char nextlch='\0';      //getL()用の次文字
 // \\nを無視する１文字入力
 char getL(){
-  char lch;
+  char lch;     //今の文字
+
+  //次の文字がからではなく'\\'でない（次の文字が持っている）
   if(nextlch!='\0' && nextlch!='\\'){
-    lch=nextlch;
-    nextlch='\0';
-    byte=byte+sizeof(char);
-    return lch;
-  }
-  if(nextlch=='\\'){
-    lch='\\';
-  }
-  else{
-    lch=fgetc(fd);
-    byte=byte+sizeof(char);
+    lch=nextlch;    //今の文字は次の文字をみる
+    nextlch='\0';   //次の文字を空にする
+    byte=byte+sizeof(char); //見た文字の数だけbyteを加算
+    return lch;     //今の文字を返す
   }
 
+  //次の文字が'\\'である
+  else if(nextlch=='\\'){
+    lch=nextlch;    //今の文字は次の文字を見る
+    nextlch='\0';   //次の文字を空にする
+    byte=byte+sizeof(char); //見た文字の数だけbyteを加算
+  }
+
+  //次の文字が空である
+  else{
+    lch=fgetc(fd);  //今の文字を入力
+    byte=byte+sizeof(char); //見た文字の数だけbyteを加算
+  }
+
+  //今の文字が'\\'である
   while(lch=='\\'){
+
+    //eofチェック
     if(!feof(fd)){
-      nextlch=fgetc(fd);
+      nextlch=fgetc(fd);  //次の文字を入力
     }
+    //eofだった
     else{
-      eofflag=true;
-      return '\n';
+      eofflag=true; //eofflagをオン
+      return '\n';  //改行を返す
     }
+
+    //次の文字が改行である
     if(nextlch=='\n'){
-      linenum=linenum+1;
+      linenum=linenum+1;  //行数をインクリメント
       if(!feof(fd)){
+
+        //以降' 'である間は続く
+        //結合時に' 'は削除して結合するため
         do{
-          lch=fgetc(fd);
+          lch=fgetc(fd);  //次の文字のさらに次を見る
           byte=byte+sizeof(char);
           if(feof(fd)){
             eofflag=true;
@@ -116,12 +133,17 @@ char getL(){
         eofflag=true;
         return '\n';
       }
-      enterlcnt=enterlcnt+1;
-      nextlch='\0';
+
+      enterlcnt=enterlcnt+1;  //改行の数だけcntを増やす
+      nextlch='\0';           //次の文字を空にする
     }
+
+    //次の文字が改行でないなら今の文字を返す
     else
       return lch;
   }
+
+  //今の文字が改行なら行数インクリメント
   if(lch=='\n')
     linenum=linenum+1;
 
@@ -132,82 +154,74 @@ char getL(){
 
 int enterhcnt=0;        //改行の数
 char nexthch='\0';      //getH()用の次文字
-boolean sentense=false;
+boolean sentense=false; //"..."または'x'用のフラグ
 // コメントを削除する１文字入力
 char getH(){
-  char hch;
-  int commentflag=0;
+  char hch;           //今の文字
+  boolean commentflag=false;  //コメントである時のフラグ
 
+  //次の文字が空でない
   if(nexthch!='\0'){
-    hch=nexthch;
-    nexthch='\0';
-    return hch;
+    hch=nexthch;    //今の文字は次の文字を見る
+    nexthch='\0';   //次の文字を空に
+    return hch;     //今の文字を返す
   }
 
-  hch=getL();
+  hch=getL();       //今の文字入力
 
-  //'x'または"..."の時
-  if(hch=='\"'){
-    if(!sentense){
-      sentense=true;
-      return hch;
-    }
-    else{
-      sentense=false;
-      return hch;
-    }
-  }
-
-  if(hch=='\n' && sentense){
-    sentense=false;
-    return hch;
-  }
-
-
+  //文字列である
   if(sentense)
-    return hch;
+    return hch;     //そのまま返す
 
 
-  //最初に'/'を見つけた
+  //今の文字が'/'である
   while(hch=='/'){
-    nexthch=getL();
+    nexthch=getL();   //次の文字を入力
+
+    //eofならbreak
     if(eofflag)
       break;
 
-    //次の文字が'/'だった
+    //次の文字が'/'である
     if(nexthch=='/'){
-      nexthch='\0';
+      nexthch='\0';  //次の文字を空にする
+
+      //改行まで飛ばす
       while(hch!='\n'){
         hch=getL();
         if(eofflag)
-          return '\n';
+          return hch;   //eofであるから改行を返すはず
       }
-      enterhcnt=enterhcnt+1;
+      enterhcnt=enterhcnt+1;  改行の数だけインクリメント
     }
 
     //次の文字が'*'だった
     else if(nexthch=='*'){
-      nexthch='\0';
-      commentflag=1;
-      while(commentflag==1){
+      nexthch='\0';   //次の文字を空にする
+      commentflag=true;  //コメントフラグをオン
+
+      //コメントフラグがオンの間飛ばす
+      while(commentflag){
+
+        //今の文字が'*'出ない間
         while(hch!='*'){
+
+          //改行ならインクリメント
           if(hch=='\n')
             enterhcnt=enterhcnt+1;
           hch=getL();
           if(eofflag){
-
-            printf("コメントエラー\n");
-            return '\n';
+            return hch; //eofであるから改行を返すはず
           }
         }
-        hch=getL();
+        hch=getL(); //'*'の次の文字を入力
         if(eofflag){
-
-          printf("コメントエラー\n");
-          return '\n';
+          return hch; //eofであるから改行を返すはず
         }
+
+        //'*'の次の文字が'/'ならコメント終了
         if(hch=='/')
-           commentflag=0;
+           commentflag=false;
       }
     }
 
@@ -215,23 +229,25 @@ char getH(){
     else
       return hch;
 
+    //コメント後にコメントが来ることを予期してもう一周する
     hch=getL();
     if(eofflag)
       return hch;
   }
-  return hch;
+
+  return hch;     //コメントでもなんでもないのでそのまま返す
 }
 
 
 
-char nextwch='\0';        //次の文字を取得する
+char nextwch='\0';        //次の文字
 boolean wordflag=false;   //今の文字と次の文字がアルファベットならtrue
 boolean wordspace=false;  //次の文字が' 'になった時true
 boolean wordpunc=false;   //次の文字が','になった時true
 boolean linehead=true;    //行の先頭ならtrue
-int parentdepth=0;        //'()'の深さ
+int parentdepth=0;        //"()"の深さ
 //今の文字と次の文字を同時にとり、記号と単語を分ける
-//返り値は今の文字だが呼び出した関数は主にフラグをみる
+//返り値は今の文字だがgetWordを呼び出した関数は主にフラグをみる
 char getWord(){
   char wch;     //今の文字
 
@@ -264,13 +280,13 @@ char getWord(){
     wordpunc=true;
   }
 
-  //今の文字が 0~9 a~z A~Z '#' '.'のどれかか
-  if(isAlnum(wch) || wch=='#' || wch=='.'){
-    linehead=false;       //行の先頭フラグをオン
+  //今の文字が 0~9 a~z A~Z '.'のどれかか
+  if(isAlnum(wch) || wch=='.'){
+    linehead=false;       //行の先頭フラグをオフ
     wordflag=true;        //単語であるのでフラグをオン
 
     //次の文字が記号なら
-    if(!isAlnum(nextwch) && nextwch!='#' && nextwch!='.'){
+    if(!isAlnum(nextwch) && nextwch!='.'){
       wordflag=false;     //フラグをオフ
     }
   }
@@ -296,6 +312,14 @@ char getWord(){
         nextwch=getH();
       return wch;
     }
+  }
+
+  //今の文字が'\"'なら
+  else if(wch=='\"'){
+    if(!sentense)
+      sentense=true;
+    else
+      sentense=false;
   }
 
   //今の文字が記号ならフラグをオフ
@@ -326,6 +350,7 @@ int entercount(){
 }
 
 
+boolean lexflag=false;
 //字句解析
 int lexical(){
   int bufn=0;                   //現在文字位置
@@ -338,7 +363,7 @@ int lexical(){
   buf=getWord();
 
   //スペースか改行か記号まで文字を取り出す
-  //ただし'#'と'.'は含めておく
+  //ただし'.'は含めておく
   while(wordflag || sentense){
     ipbuf[bufn]=buf;
     word[wordn]=buf;
@@ -350,6 +375,7 @@ int lexical(){
   //改行で終わったなら行先頭フラグを立てる
   if(buf=='\n'){
     bufn=entercount();
+    sentense=false;
     linehead=true;
     if(parentdepth!=0)
       return T_ERROR;
@@ -366,37 +392,40 @@ int lexical(){
   int wordlen=strLen(word);
 
   //字句解析
-  if(strCmp(word,"#Edefine")==0){
-    return T_EDEFINE;
+  if(lexflag){
+    if(strCmp(word,"Edefine")==0){
+      return T_EDEFINE;
+    }
+    else if(strCmp(word,"Sdefine")==0){
+      return T_SDEFINE;
+    }
+    else if(strCmp(word,"include")==0){
+      return T_INCLUDE;
+    }
+    else if(strCmp(word,"else")==0){
+      return T_ELSE;
+    }
+    else if(strCmp(word,"ifdef")==0){
+      return T_IFDEF;
+    }
+    else if(strCmp(word,"ifndef")==0){
+      return T_IFNDEF;
+    }
+    else if(strCmp(word,"elseifdef")==0){
+      return T_ELSEIFDEF;
+    }
+    else if(strCmp(word,"elseifndef")==0){
+      return T_ELSEIFNDEF;
+    }
+    else if(strCmp(word,"endif")==0){
+      return T_ENDIF;
+    }
+    else if(strCmp(word,"undef")==0){
+      return T_UNDEF;
+    }
   }
-  else if(strCmp(word,"#Sdefine")==0){
-    return T_SDEFINE;
-  }
-  else if(strCmp(word,"#include")==0){
-    return T_INCLUDE;
-  }
-  else if(strCmp(word,"#else")==0){
-    return T_ELSE;
-  }
-  else if(strCmp(word,"#ifdef")==0){
-    return T_IFDEF;
-  }
-  else if(strCmp(word,"#ifndef")==0){
-    return T_IFNDEF;
-  }
-  else if(strCmp(word,"#elseifdef")==0){
-    return T_ELSEIFDEF;
-  }
-  else if(strCmp(word,"#elseifndef")==0){
-    return T_ELSEIFNDEF;
-  }
-  else if(strCmp(word,"#endif")==0){
-    return T_ENDIF;
-  }
-  else if(strCmp(word,"#undef")==0){
-    return T_UNDEF;
-  }
-  else if(word[0]=='\'' && word[wordlen-1]=='\''){
+
+  if(word[0]=='\'' && word[wordlen-1]=='\''){
     return T_MOJI;
   }
   else if(word[0]=='\"' && word[wordlen-1]=='\"'){
@@ -406,6 +435,8 @@ int lexical(){
 }
 
 
+//' 'をスキップする関数
+//返り値は単語タイプ
 int skipspace(){
   int type;
   lexical();
@@ -443,6 +474,7 @@ char[][] getArg(){
       lexical();
       arg=strCat(arg,word);
     }
+    arg=strCat(arg,"\0");
     args[narg]=arg;
     narg=narg+1;
   }
@@ -607,8 +639,29 @@ int do_Sdefine(){
 }
 
 
-int do_include(char[] ipbuf,int bufn){
+int do_include(){
+  int type;
+  char[] includename=malloc(sizeof(char)*INCLUDENAME);
 
+  type=skipspace();
+  if(type==T_MOJI){
+    int i=0;
+    for(i=1;word[i]!='\"';i=i+1)
+      includename[i-1]=word[i];
+  }
+  else if(word[0]=='<'){
+    lexical();
+    while(word[0]!='>'){
+      includename=strCat(includename,word);
+      lexical();
+    }
+  }
+  saveincdepth(linenum,byte);
+  isp=makeincdepth(includename);
+  fd=fopen(incdepth[isp].name,"r");
+  byte=0;
+  linenum=0;
+  return 0;
 }
 
 
