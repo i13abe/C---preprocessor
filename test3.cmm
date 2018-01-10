@@ -160,9 +160,8 @@ char getH(){
 char nextwch='\0';        //次の文字を取得する
 boolean wordflag=false;   //今の文字と次の文字がアルファベットならtrue
 boolean wordspace=false;  //次の文字が' 'になった時true
-boolean wordpunc=false;   //次の文字が','になった時true
+boolean argspace=false;   //引数の解析時のフラグ
 boolean linehead=true;    //行の先頭ならtrue
-int parentdepth=0;        //'()'の深さ
 //今の文字と次の文字を同時にとり、記号と単語を分ける
 //返り値は今の文字だが呼び出した関数は主にフラグをみる
 char getWord(){
@@ -181,22 +180,6 @@ char getWord(){
 
   nextwch=getH();   //次の文字取得
 
-
-  //次の文字が'('ならインクリメント
-  if(nextwch=='('){
-    parentdepth=parentdepth+1;
-  }
-
-  //次の文字が')'ならデクリメント
-  else if(nextwch==')'){
-    parentdepth=parentdepth-1;
-  }
-
-  //次の文字が','ならフラグをオン
-  else if(nextwch==','){
-    wordpunc=true;
-  }
-
   //今の文字が 0~9 a~z A~Z '.'のどれかか
   if(isAlnum(wch) || wch=='.'){
     linehead=false;       //行の先頭フラグをオン
@@ -208,14 +191,8 @@ char getWord(){
     }
   }
 
-  //今の文字が','ならフラグをオフ
-  else if(wch==','){
-    linehead=false;
-    wordpunc=false;
-  }
-
   //今の文字が' 'なら
-  else if(wch==' '){
+  else if(wch==' ' && !argspace){
     //行の先頭ならそのまま' 'を返す
     if(linehead){
       wordspace=false;
@@ -276,7 +253,6 @@ int lexical(){
 
   word=malloc(sizeof(char)*INPUTSIZE);
 
-
   buf=getWord();
 
   //スペースか改行か記号まで文字を取り出す
@@ -294,8 +270,6 @@ int lexical(){
     bufn=entercount();
     sentense=false;
     linehead=true;
-    if(parentdepth!=0)
-      return T_ERROR;
   }
 
 
@@ -361,44 +335,59 @@ int skipspace(){
 }
 
 
+char[] lexarg(){
+  int parentcnt=0;
+  char[] arg;
+  arg=malloc(sizeof(char)*ARGSIZE);
+
+  lexical();
+  arg=strCpy(arg,"\0");
+  while(true){
+    if(strCmp(word,",")==0 && parentcnt==0)
+      break;
+    if(strCmp(word,")")==0 && parentcnt==0)
+      break;
+    if(strCmp(word,"\n")==0 || eofflag){
+      //T_ERROR
+      break;
+    }
+    if(strCmp(word,"(")==0)
+      parentcnt=parentcnt+1;
+    else if(strCmp(word,")")==0)
+      parentcnt=parentcnt-1;
+    arg=strCat(arg,word);
+    lexical();
+  }
+  return arg;
+}
+
+
 //(x,y)とかの引数の取り出し
 //返り値は引数
 int narg;     //引数数
 char[][] getArg(){
   char[][] args;      //引数を持つ配列
-  char[] arg;         //引数の文字
   narg=0;             //引数の数
-  int endparent;      //引数の終わり位置
-
-  //'('がないなら終わり位置は0
-  if(parentdepth==0)
-    endparent=0;
-  //'('があったら1つ減らして値を持つ
-  //'('が複数回呼ばれている時用に1減らす
-  else
-    endparent=parentdepth-1;
+  argspace=true;
 
   args=malloc(sizeof(char[])*ARGSIZE);
 
-  while(parentdepth!=endparent){
-    lexical();
-    while(word[0]=='(' || word[0]==',' || word[0]==')')
-      lexical();
-    arg=malloc(sizeof(char)*ARGSIZE);
-    arg=strCpy(arg,word);
-    while(!wordpunc && parentdepth!=endparent){
-      lexical();
-      arg=strCat(arg,word);
-    }
-    arg=strCat(arg,"\0");
-    args[narg]=arg;
+  lexical();
+  if(strCmp(word,"(")==0){
+    args[narg]=lexarg();
     narg=narg+1;
+    while(strCmp(word,",")==0){
+      args[narg]=lexarg();
+      narg=narg+1;
+    }
+    if(strCmp(word,")")!=0)
+      //error
+      narg=narg;
   }
 
-  if(narg!=0)
-    lexical();
-
   args[narg]=null;
+  argspace=false;
+
   return args;
 }
 
@@ -732,12 +721,7 @@ public int main(int argc,char[][] argv){
         int n=searchdef(word);
         if(n!=-1){
           submacro=word;
-          if(deftable[n].narg==0){
-            subarg=null;
-          }
-          else{
-            subarg=getArg();
-          }
+          subarg=getArg();
           ipbuf=replacedef(submacro,subarg);
         }
         int i=0;

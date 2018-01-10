@@ -1,8 +1,8 @@
+#include "including.hmm"
 #Edefine A (a+a)
 #Edefine AA(a) (a+A)
 #Sdefine B(b) text##b
 #Sdefine PF(p,f) #p,f
-#include "including.hmm"
 
 int main(){
   int a=AA(1);
