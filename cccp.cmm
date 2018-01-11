@@ -169,6 +169,14 @@ char getH(){
 
   hch=getL();       //今の文字入力
 
+  //今の文字が'\"'なら
+  if(hch=='\"'){
+    if(!sentense)
+      sentense=true;
+    else
+      sentense=false;
+  }
+
   //文字列である
   if(sentense)
     return hch;     //そのまま返す
@@ -192,7 +200,7 @@ char getH(){
         if(eofflag)
           return hch;   //eofであるから改行を返すはず
       }
-      enterhcnt=enterhcnt+1;  改行の数だけインクリメント
+      break;
     }
 
     //次の文字が'*'だった
@@ -270,7 +278,11 @@ char getWord(){
 
     //次の文字が記号なら
     if(!isAlnum(nextwch) && nextwch!='.'){
-      wordflag=false;     //フラグをオフ
+      //終わりの'\"'なら
+      if(nextwch=='\"' && !sentense)
+        wordflag=true;      //フラグをオン
+      else
+        wordflag=false;     //フラグをオフ
     }
   }
 
@@ -293,10 +305,10 @@ char getWord(){
 
   //今の文字が'\"'なら
   else if(wch=='\"'){
-    if(!sentense)
-      sentense=true;
+    if(sentense)
+      wordflag=true;
     else
-      sentense=false;
+      wordflag=false;
   }
 
   //今の文字が記号ならフラグをオフ
@@ -340,7 +352,7 @@ int lexical(){
 
   //スペースか改行か記号まで文字を取り出す
   //ただし'.'は含めておく
-  while(wordflag || sentense){
+  while(wordflag){
     ipbuf[bufn]=buf;
     word[wordn]=buf;
     bufn=bufn+1;
