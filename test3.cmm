@@ -19,9 +19,20 @@ boolean eofflag=false;
 char[] ipbuf=array(INPUTSIZE);
 char[] word;
 int isp=0;
-int byte=0;
+int bytel=0;
+int byteh=0;
 int linenum=1;
 
+
+void byteplus(){
+  if(bytel==32767){
+    byteh=byteh+sizeof(char);
+    bytel=0;
+  }
+  else{
+    bytel=bytel+sizeof(char);
+  }
+}
 
 int enterlcnt=0;         //改行の数
 char nextlch='\0';      //getL()用の次文字
@@ -31,7 +42,7 @@ char getL(){
   if(nextlch!='\0' && nextlch!='\\'){
     lch=nextlch;
     nextlch='\0';
-    byte=byte+sizeof(char);
+    byteplus();
     return lch;
   }
   if(nextlch=='\\'){
@@ -39,7 +50,7 @@ char getL(){
   }
   else{
     lch=fgetc(fd);
-    byte=byte+sizeof(char);
+    byteplus();
   }
 
   while(lch=='\\'){
@@ -55,7 +66,7 @@ char getL(){
       if(!feof(fd)){
         do{
           lch=fgetc(fd);
-          byte=byte+sizeof(char);
+          byteplus();
           if(feof(fd)){
             eofflag=true;
             return '\n';
@@ -581,10 +592,11 @@ int do_include(){
       lexical();
     }
   }
-  saveincdepth(linenum,byte);
+  saveincdepth(linenum,byteh,bytel);
   isp=makeincdepth(includename);
   fd=fopen(incdepth[isp].name,"r");
-  byte=0;
+  byteh=0;
+  bytel=0;
   linenum=0;
   return 0;
 }
@@ -594,6 +606,7 @@ int do_include(){
 #define IFDEPTH 10
 int[] ifdepth=array(IFDEPTH);
 int sp=0;
+boolean elseflag=false;
 
 int conditioncheck(){
   skipspace();
@@ -604,10 +617,12 @@ int conditioncheck(){
 }
 
 int do_ifdef(int con){
+  elseflag=false;
   if(ifdepth[sp]==1){
     sp=sp+1;
     if(con==1){
       ifdepth[sp]=1;
+      elseflag=true;
     }
     else{
       ifdepth[sp]=0;
@@ -622,7 +637,7 @@ int do_ifdef(int con){
 
 int do_else(){
   if(ifdepth[sp-1]==1){
-    if(ifdepth[sp]==1){
+    if(ifdepth[sp]==1 || elseflag){
       ifdepth[sp]=0;
     }
     else{
@@ -636,10 +651,12 @@ int do_else(){
 }
 
 int do_ifndef(int con){
+  elseflag=false;
   if(ifdepth[sp]==1){
     sp=sp+1;
     if(con==0){
       ifdepth[sp]=1;
+      elseflag=true;
     }
     else{
       ifdepth[sp]=0;
@@ -653,14 +670,14 @@ int do_ifndef(int con){
 }
 
 int do_elseifdef(int con){
-  if(ifdepth[sp-1]==1){
+  if(ifdepth[sp-1]==1 && !elseflag){
     if(ifdepth[sp]==1){
       ifdepth[sp]=0;
     }
     else{
       if(con==1){
         ifdepth[sp]=1;
-        ifdepth[sp-1]=0;
+        elseflag=true;
       }
       else{
         ifdepth[sp]=0;
@@ -674,14 +691,14 @@ int do_elseifdef(int con){
 }
 
 int do_elseifndef(int con){
-  if(ifdepth[sp-1]==1){
+  if(ifdepth[sp-1]==1 && !elseflag){
     if(ifdepth[sp]==1){
       ifdepth[sp]=0;
     }
     else{
       if(con==0){
         ifdepth[sp]=1;
-        ifdepth[sp-1]=0;
+        elseflag=true;
       }
       else{
         ifdepth[sp]=0;
@@ -697,6 +714,7 @@ int do_elseifndef(int con){
 int do_endif(){
   ifdepth[sp]=0;
   sp=sp-1;
+  elseflag=false;
   return 0;
 }
 
@@ -713,6 +731,10 @@ public int main(int argc,char[][] argv){
 
   while(!feof(fd)){
     type=lexical();
+    if(word[0]=='#'){
+      lexflag=true;
+      continue;
+    }
 
     if(ifdepth[sp]==1){
       if(type==T_OTHER || type==T_MOJI){
@@ -722,10 +744,6 @@ public int main(int argc,char[][] argv){
           for(i=0;ipbuf[i]!='\0';i=i+1)
             putchar(ipbuf[i]);
           lexflag=false;
-          continue;
-        }
-        if(word[0]=='#'){
-          lexflag=true;
           continue;
         }
 
@@ -767,43 +785,40 @@ public int main(int argc,char[][] argv){
 
     if(type==T_IFDEF){
       lexflag=false;
-      putchar('\n');
       condition=conditioncheck();
       do_ifdef(condition);
     }
     else if(type==T_ELSE){
       lexflag=false;
-      putchar('\n');
       do_else();
     }
     else if(type==T_IFNDEF){
       lexflag=false;
-      putchar('\n');
       condition=conditioncheck();
       do_ifndef(condition);
     }
     else if(type==T_ELSEIFDEF){
       lexflag=false;
-      putchar('\n');
       condition=conditioncheck();
       do_elseifdef(condition);
     }
     else if(type==T_ELSEIFNDEF){
       lexflag=false;
-      putchar('\n');
       condition=conditioncheck();
       do_elseifndef(condition);
     }
     else if(type==T_ENDIF){
       lexflag=false;
-      putchar('\n');
       do_endif();
     }
 
     if(feof(fd) && isp!=0){
       isp=deleteincdepth(incdepth[isp].name);
       fd=fopen(incdepth[isp].name,"r");
-      fseek(fd,incdepth[isp].dbyte,0);
+      fseek(fd,incdepth[isp].dbyteh,incdepth[isp].dbytel);
+      byteh=incdepth[isp].dbyteh;
+      bytel=incdepth[isp].dbytel;
+      printf("h=%d l=%d\n",byteh,bytel);
     }
   }
 

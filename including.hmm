@@ -3,11 +3,12 @@
 struct filelist{
   char[] name;
   int linen;
-  int dbyte;
+  int dbyteh;
+  int dbytel;
 };
 
 public filelist[] incdepth;
 
-public int saveincdepth(int linenum,int byte);
+public int saveincdepth(int linenum,int byteh,int bytel);
 public int makeincdepth(char[] fname);
 public int deleteincdepth(char[] fname);

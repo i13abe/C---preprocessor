@@ -27,9 +27,20 @@ char[] word;                                //単語用バッファ
 boolean eofflag=false;                      //EOF用フラグ
 int[] ifdepth=array(IFDEPTH);               //ifの入れ子用スタック
 int sp=0;                                   //ifdepth用スタックポインタ
+boolean elseflag=false;                     //複数elseの内１つでも条件が成立した時のフラグ
 int linenum=1;                              //行番号
-int byte=0;                                 //byte数
+int bytel=0;                                //下位16bitのbyte数
+int byteh=0;                                //上位16bitのbyte数
 
+void byteplus(){
+  if(bytel==32767){
+    byteh=byteh+sizeof(char);
+    bytel=0;
+  }
+  else{
+    bytel=bytel+sizeof(char);
+  }
+}
 
 
 //is_idchar is_idstart is_hor_space is_spaceの初期化
@@ -83,7 +94,7 @@ char getL(){
   if(nextlch!='\0' && nextlch!='\\'){
     lch=nextlch;    //今の文字は次の文字をみる
     nextlch='\0';   //次の文字を空にする
-    byte=byte+sizeof(char); //見た文字の数だけbyteを加算
+    byteplus();     //見た文字の数だけbyteを加算
     return lch;     //今の文字を返す
   }
 
@@ -97,7 +108,7 @@ char getL(){
   //次の文字が空である
   else{
     lch=fgetc(fd);  //今の文字を入力
-    byte=byte+sizeof(char); //見た文字の数だけbyteを加算
+    byteplus();     //見た文字の数だけbyteを加算
   }
 
   //今の文字が'\\'である
@@ -122,7 +133,7 @@ char getL(){
         //結合時に' 'は削除して結合するため
         do{
           lch=fgetc(fd);  //次の文字のさらに次を見る
-          byte=byte+sizeof(char);
+          byteplus();
           if(feof(fd)){
             eofflag=true;
             return '\n';
@@ -657,20 +668,23 @@ int do_include(){
       lexical();
     }
   }
-  saveincdepth(linenum,byte);
+  saveincdepth(linenum,byteh,bytel);
   isp=makeincdepth(includename);
   fd=fopen(incdepth[isp].name,"r");
-  byte=0;
+  byteh=0;
+  bytel=0;
   linenum=0;
   return 0;
 }
 
 
 int do_ifdef(int con){
+  elseflag=false;
   if(ifdepth[sp]==1){
     sp=sp+1;
     if(con==1){
       ifdepth[sp]=1;
+      elseflag=true;
     }
     else{
       ifdepth[sp]=0;
@@ -685,10 +699,12 @@ int do_ifdef(int con){
 
 
 int do_ifndef(int con){
+  elseflag=false;
   if(ifdepth[sp]==1){
     sp=sp+1;
     if(con==0){
       ifdepth[sp]=1;
+      elseflag=true;
     }
     else{
       ifdepth[sp]=0;
@@ -704,7 +720,7 @@ int do_ifndef(int con){
 
 int do_else(){
   if(ifdepth[sp-1]==1){
-    if(ifdepth[sp]==1){
+    if(ifdepth[sp]==1 || elseflag){
       ifdepth[sp]=0;
     }
     else{
@@ -720,13 +736,13 @@ int do_else(){
 
 int do_elseifdef(int con){
   if(ifdepth[sp-1]==1){
-    if(ifdepth[sp]==1){
+    if(ifdepth[sp]==1 && !elseflag){
       ifdepth[sp]=0;
     }
     else{
       if(con==1){
         ifdepth[sp]=1;
-        ifdepth[sp-1]=0;
+        elseflag=true;
       }
       else{
         ifdepth[sp]=0;
@@ -742,13 +758,13 @@ int do_elseifdef(int con){
 
 int do_elseifndef(int con){
   if(ifdepth[sp-1]==1){
-    if(ifdepth[sp]==1){
+    if(ifdepth[sp]==1 && !elseflag){
       ifdepth[sp]=0;
     }
     else{
       if(con==0){
         ifdepth[sp]=1;
-        ifdepth[sp-1]=0;
+        elseflag=true;
       }
       else{
         ifdepth[sp]=0;
@@ -765,6 +781,7 @@ int do_elseifndef(int con){
 int do_endif(){
   ifdepth[sp]=0;
   sp=sp-1;
+  elseflag=false;
   return 0;
 }
 
@@ -796,10 +813,25 @@ void construction(){
 }
 
 
+char[][] dotdelete(char[] str){
+  int bufn=0;
+  int rbufn=0;
+  char[] ret=malloc(sizeof(char)*strLen(str));
+  for(bufn=0;str[bufn]!=".";bufn=bufn+1){
+    ret[rbufn]=str[bufn];
+    rbufn=rbufn+1;
+  }
+  ret[rbufn]="\0";
+  return ret;
+}
+
+
+
 public int main(int argc,char[][] argv){
 
   char[] bufer;         //マクロ展開時用バッファ
-  int linen=1;            //行番号
+  char[] opname;        //出力ファイル名
+  int linen=1;          //行番号
   char buf;             //現在文字
   int bufn;             //現在文字位置
   int type;             //字句解析タイプ
@@ -807,6 +839,8 @@ public int main(int argc,char[][] argv){
 
   initialize_char_syntax();
   fd=fopen(argv[1],"r");       //入力ファイル
+  opname=dotdelete(argv[1]);
+  opname=strCat(opname,".i\0");
 
   char[][] subarg;
   char[] submacro;

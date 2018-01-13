@@ -5,9 +5,10 @@
 
 int ifsp=-1;
 
-public int saveincdepth(int linenum,int byte){
+public int saveincdepth(int linenum,int byteh,int bytel){
   incdepth[ifsp].linen=linenum;
-  incdepth[ifsp].dbyte=byte;
+  incdepth[ifsp].dbyteh=byteh;
+  incdepth[ifsp].dbytel=bytel;
   return ifsp;
 }
 
@@ -16,7 +17,8 @@ public int makeincdepth(char[] fname){
   incdepth[ifsp]=malloc(sizeof(filelist));
   incdepth[ifsp].name=fname;
   incdepth[ifsp].linen=0;
-  incdepth[ifsp].dbyte=0;
+  incdepth[ifsp].dbyteh=0;
+  incdepth[ifsp].dbytel=0;
   return ifsp;
 }
 
