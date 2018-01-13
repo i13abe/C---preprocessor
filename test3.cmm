@@ -670,7 +670,7 @@ int do_ifndef(int con){
 }
 
 int do_elseifdef(int con){
-  if(ifdepth[sp-1]==1 && !elseflag){
+  if(elseflag){
     if(ifdepth[sp]==1){
       ifdepth[sp]=0;
     }
@@ -691,7 +691,7 @@ int do_elseifdef(int con){
 }
 
 int do_elseifndef(int con){
-  if(ifdepth[sp-1]==1 && !elseflag){
+  if(elseflag){
     if(ifdepth[sp]==1){
       ifdepth[sp]=0;
     }
@@ -718,10 +718,25 @@ int do_endif(){
   return 0;
 }
 
+char[] dotdelete(char[] str){
+  int bufn=0;
+  int rbufn=0;
+  char[] ret=malloc(sizeof(char)*strLen(str));
+  for(bufn=0;str[bufn]!='.';bufn=bufn+1){
+    ret[rbufn]=str[bufn];
+    rbufn=rbufn+1;
+  }
+  ret[rbufn]='\0';
+  return ret;
+}
 
 public int main(int argc,char[][] argv){
   isp=makeincdepth(argv[1]);
   fd=fopen(incdepth[isp].name,"r");
+  char[] opname;
+  opname=dotdelete(argv[1]);
+  opname=strCat(opname,".i\0");
+
 
   int type;
   int condition;
@@ -823,5 +838,6 @@ public int main(int argc,char[][] argv){
   }
 
   fclose(fd);
+  puts(opname);
   return 0;
 }
