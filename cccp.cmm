@@ -6,28 +6,29 @@
 #include "./difinition.hmm"
 #include "./including.hmm"
 
-#define INPUTSIZE 50      //単語のマックスサイズ
-#define ARGSIZE 5         //マクロの引数数。内一つはnull用
-#define TABLESIZE 20      //definitionテーブルのサイズ
-#define INDEPTHSIZE 10    //includeの入れ子サイズ
-#define INCLUDENAME 20    //includeのファイル名の大きさ
-#define IFDEPTH 10        //ifの入れ子の深さ
+#define INPUTSIZE 50                            //単語のマックスサイズ
+#define ARGSIZE 5                               //マクロの引数数。内一つはnull用
+#define TABLESIZE 20                            //definitionテーブルのサイズ
+#define INDEPTHSIZE 10                          //includeの入れ子サイズ
+#define INCLUDENAME 20                          //includeのファイル名の大きさ
+#define IFDEPTH 10                              //ifの入れ子の深さ
 
 
 
 public definition[] deftable=array(TABLESIZE);  //deftableの初期化
 public filelist[] incdepth=array(INDEPTHSIZE);  //includeのdepthの初期化
-FILE fd;                                    //入力ファイル
-FILE op;                                    //出力ファイル
-unsigned char[] ipbuf=array(INPUTSIZE);     //入力ファイル用バッファ
-char[] word;                                //単語用バッファ
-boolean eofflag=false;                      //EOF用フラグ
-int[] ifdepth=array(IFDEPTH);               //ifの入れ子用スタック
-int sp=0;                                   //ifdepth用スタックポインタ
-boolean elseflag=false;                     //複数elseの内１つでも条件が成立した時のフラグ
-int linenum=1;                              //行番号
-int bytel=0;                                //下位16bitのbyte数
-int byteh=0;                                //上位16bitのbyte数
+FILE fd;                                        //入力ファイル
+FILE op;                                        //出力ファイル
+unsigned char[] ipbuf=array(INPUTSIZE);         //入力ファイル用バッファ
+char[] word;                                    //単語用バッファ
+boolean eofflag=false;                          //EOF用フラグ
+int[] ifdepth=array(IFDEPTH);                   //ifの入れ子用スタック
+int sp=0;                                       //ifdepth用スタックポインタ
+boolean elseflag=false;                         //複数elseの内１つでも条件が成立した時のフラグ
+int isp=0;                                      //includeテーブルのスタックポインタ
+int linenum=1;                                  //行番号
+int bytel=0;                                    //下位16bitのbyte数
+int byteh=0;                                    //上位16bitのbyte数
 
 
 
@@ -577,6 +578,26 @@ int do_Sdefine(){
 
 
 
+#define LINEC(l) #l                                         //行数を文字列にするため
+//# 行番号　ファイル名を出力
+void lineoutput(){
+  int len=0;                                                //文字列の長さ
+  fputc('#',op);                                            //'#'を印字
+  fputc(' ',op);                                            //スペースを印字
+  char[] linec=LINEC(linenum);                              //行数を文字列化
+  len=strLen(linec);                                        //行数の長さ取得
+  int i=0;
+  for(i=0;i<len;i=i+1)                                      //文字数だけループ
+    fputc(linec[i],op);                                     //行数印字
+  fputc(' ',op);                                            //スペース印字
+  fputc('\"',op);                                           //'\"'を印字
+  len=strLen(incdepth[isp].name);                           //ファイル名の長さ取得
+  for(i=0;i<len;i=i+1)                                      //文字数だけループ
+    fputc(incdepth[isp].name[i]);                           //ファイル名印字
+  fputc('\"',op);                                           //'\"'を印字
+  fputc('\n',op);                                           //改行
+}
+
 //#includeを見つけた
 int do_include(){
   int type;                                               //単語タイプ
@@ -600,12 +621,20 @@ int do_include(){
   else                                                    //"..."でも<...>でもないなら
 //includeの記述に反するエラー
 
+  lexical();                                              //１単語取得
+  if(strCmp(word,"\n")!=0){                               //改行でないなら
+    lexical();                                            //１単語取得
+//#includeの記述に反するwarning
+    while(strCmp(word,"\n")!=0)                           //改行でない間
+      lexical();                                          //１単語取得
+  }
   saveincdepth(linenum,byteh,bytel);                      //今のファイル名の読み込みバイト数と行すうを保存
   isp=makeincdepth(includename);                          //includeのファイル名を登録
   fd=fopen(incdepth[isp].name,"r");                       //includeのファイル名でオープン
   byteh=0;                                                //bytehの初期化
   bytel=0;                                                //bytelの初期化
-  linenum=0;                                              //linenumの初期化
+  linenum=1;                                              //linenumの初期化
+  lineoutput();                                           //ファイルの始まりを印字
   return 0;                                               //正常終了
 }
 
@@ -782,75 +811,118 @@ char[] dotdelete(char[] str){
 
 
 public int main(int argc,char[][] argv){
+  char[] bufer;                               //マクロ展開時用バッファ
+  char[] opname;                              //出力ファイル名
+  int linen=1;                                //行番号
+  char buf;                                   //現在文字
+  int bufn;                                   //現在文字位置
+  int type;                                   //字句解析タイプ
+  int condition;                              //条件のコンディション
 
-  char[] bufer;         //マクロ展開時用バッファ
-  char[] opname;        //出力ファイル名
-  int linen=1;          //行番号
-  char buf;             //現在文字
-  int bufn;             //現在文字位置
-  int type;             //字句解析タイプ
-  int condition;
+  isp=makeincdepth(argv[1]);                  //ソースファイルをテーブルに追加
+  fd=fopen(incdepth[isp].name,"r");           //入力ファイルオープン
+  lineoutput();                               //ファイルの始まり
+  opname=dotdelete(argv[1]);                  //出力ファイル名の'.'以前を取得
+  opname=strCat(opname,".i\0");               //出力ファイル名作成
+  op=fopen(opname,"w");                       //出力ファイルオープン
 
-  initialize_char_syntax();
-  fd=fopen(argv[1],"r");       //入力ファイル
-  opname=dotdelete(argv[1]);
-  opname=strCat(opname,".i\0");
+  char[][] subarg;                            //引数用２次元配列
+  char[] submacro;                            //マクロ名
+  ifdepth[sp]=1;                              //ifdepthの最初は常に１
 
-  char[][] subarg;
-  char[] submacro;
-  ifdepth[sp]=1;    //ifdepthの最初は常に１
-
-  //入力ファイル読み込み
-  while(!feof(fd)){
-    type=lexical()            //入力行の単語のタイプ
-
-    //タイプがEdefineなら
-    if(type==T_EDEFINE){
-
-      //その行分の改行の出力
-
-      do_Edefine();
+  while(!feof(fd)){                           //入力ファイルから単語を読み込み
+    type=lexical()                            //入力の単語のタイプ
+    if(word[0]=='#'){                         //'#'を見つけたなら
+      lexflag=true;                           //lexflagをオン
+      continue;                               //ループの最初に戻る
     }
-    else if(type==T_SDEFINE){
-      do_Sdefine();
+    if(ifdepth[sp]==1){                       //#if #elseの条件が成立している
+      if(type==T_MOJI || type==T_OTHER){      //"..."または'x'またはただの単語なら
+        if(lexflag){                          //'#'を見つけていたら
+          fputc('#',op);                      //'#'を印字
+          int i=0;
+          for(i=0;ipbuf[i]!='\0';i=i+1)       //bufferの終わりまでループ
+            fputc(ipbuf[i],op);               //bufferを印字
+          lexflag=false;                      //lexflagをオフ
+          continue;                           //ループの最初に戻る
+        }
+        int n=searchdef(word);                //マクロ名を探索
+        if(n!=-1){                            //マクロ名なら
+          submacro=word;                      //マクロ名を保持
+          subarg=getArg();                    //引数を取得
+          ipbuf=replacedef(submacro,subarg);  //bufferにマクロを展開
+        }
+        int i=0;
+        for(i=0;ipbuf[i]!='\0';i=i+1)         //buffreの終わりまでループ
+          fputc(ipbuf[i],op);                 //bufferを印字
+      }
+      else if(type==T_EDEFINE){               //#Edefineなら
+        lexflag=false;                        //lexflagをオフ
+        fputc('\n',op);                       //改行を印字
+        do_Edefine();                         //do_Edefine()呼び出し
+      }
+      else if(type==T_SDEFINE){               //#Sdefineなら
+        lexflag=false;                        //lexflagをオフ
+        fputc('\n',op);                      //改行を印字
+        do_Sdefine();                         //do_Sdefine()呼び出し
+      }
+      else if(type==T_INCLUDE){               //#includeなら
+        lexflag=false;                        //lexflagをオフ
+        do_include();                         //do_include()呼び出し
+      }
+      else if(type==T_UNDEF){                 //#undefなら
+        lexflag=false;                        //lexflagをオフ
+        fputc('\n',op);                       //改行を印字
+        do_undef();                           //do_undef()呼び出し
+      }
     }
-    else if(type==T_INCLUDE){
-      do_include();
-    }
-    else if(type==T_ELSE){
-      do_else();
-    }
-    else if(type==T_IFDEF){
-      do_ifdef();
-    }
-    else if(type==T_IFNDEF){
-      do_ifndef();
-    }
-    else if(type==T_ELSEIFDEF){
-      do_elseifdef();
-    }
-    else if(type==T_ELSEIFNDEF){
-      do_elseifndef();
-    }
-    else if(type==T_ENDIF){
-      do_endif();
-    }
-    else if(type==T_UNDEF){
-      do_undef();
-    }
-    else if(type==T_MOJI){
-
-      //何も考えずに出力
-
-    }
-    else if(type=T_OTHER){
-
-      //マクロ名かどうかの探索またはoutput出力
-
+    else{                                     //#if #elseの条件が不成立なら
+      lexflag=false;                          //lexflagをオフ
+      if(strCmp(word,"\n")==0)                //今の単語が'\n'なら
+        fputc('\n',op);                       //改行を印字
     }
 
+    if(type==T_ELSE){                         //#elseなら
+      lexflag=false;                          //lexflagをオフ
+      do_else();                              //do_else()呼び出し
+    }
+    else if(type==T_IFDEF){                   //#ifdefなら
+      lexflag=false;                          //lexflagをオフ
+      condition=conditioncheck();             //条件をチェック
+      do_ifdef(condition);                    //do_ifdef()呼び出し
+    }
+    else if(type==T_IFNDEF){                  //#ifndefなら
+      lexflag=false;                          //lexflagをオフ
+      condition=conditioncheck();             //条件をチェック
+      do_ifndef(condition);                   //do_ifndef()呼び出し
+    }
+    else if(type==T_ELSEIFDEF){               //#elseifdefなら
+      lexflag=false;                          //lexflagをオフ
+      condition=conditioncheck();             //条件をチェック
+      do_elseifdef(condition);                //do_elseifdef()呼び出し
+    }
+    else if(type==T_ELSEIFNDEF){              //#elseifndefなら
+      lexflag=false;                          //lexflagをオフ
+      condition=conditioncheck();             //条件をチェック
+      do_elseifndef(condition);               //do_elseifndef()呼び出し
+    }
+    else if(type==T_ENDIF){                   //#endifなら
+      lexflag=false;                          //lexflagをオフ
+      do_endif();                             //do_endif()呼び出し
+    }
+
+    if(feof(fd) && isp!=0){                   //今見ているファイルがeofでincludeテーブルのスタックポインタが１番下でないなら
+      fclose(fd);                             //今見ているファイルをクローズ
+      isp=deleteincdepth(incdepth[isp].name); //includeテーブルを１つ削除
+      fd=fopen(incdepth[isp].name,"r");       //前のファイルをオープン
+      fseek(fd,incdepth[isp].dbyteh,incdepth[isp].dbytel);  //元の位置に移動
+      byteh=incdepth[isp].dbyteh;             //dbytehを取得
+      bytel=incdepth[isp].dbytel;             //dbytelを取得
+      linenum=incdepth[isp].linen;            //linenumを取得
+      lineoutput();                           //ファイルの始まり
+    }
   }
-  fclose(fd);
-
-
+  fclose(fd);                                 //入力ファイルをクローズ
+  fclose(op);
+  return 0;
 }
