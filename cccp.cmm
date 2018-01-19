@@ -10,7 +10,7 @@
 #define ARGSIZE 5                               //マクロの引数数。内一つはnull用
 #define TABLESIZE 20                            //definitionテーブルのサイズ
 #define INDEPTHSIZE 10                          //includeの入れ子サイズ
-#define INCLUDENAME 20                          //includeのファイル名の大きさ
+#define INCLUDENAME 50                          //includeのファイル名の大きさ
 #define IFDEPTH 10                              //ifの入れ子の深さ
 
 
@@ -19,7 +19,7 @@ public definition[] deftable=array(TABLESIZE);  //deftableの初期化
 public filelist[] incdepth=array(INDEPTHSIZE);  //includeのdepthの初期化
 FILE fd;                                        //入力ファイル
 FILE op;                                        //出力ファイル
-char[] ipbuf=array(INPUTSIZE);         //入力ファイル用バッファ
+char[] ipbuf=array(INPUTSIZE);                  //入力ファイル用バッファ
 char[] word;                                    //単語用バッファ
 boolean eofflag=false;                          //EOF用フラグ
 int[] ifdepth=array(IFDEPTH);                   //ifの入れ子用スタック
@@ -34,7 +34,7 @@ int byteh=0;                                    //上位16bitのbyte数
 
 //エラー強制終了
 void do_error(char[] ers){
-  printf("%s:line %d ",incdepth[isp].name,linenum);   //エラーファイル名と行番号出力
+  printf("%s:line %d:",incdepth[isp].name,linenum);   //エラーファイル名と行番号出力
   puts(ers);                                            //エラーを出力
   exit(1);                                              //強制終了
 }
@@ -207,55 +207,55 @@ boolean linehead=true;                    //行の先頭かどうかのフラグ
 //今の文字と次の文字を同時にとり、記号と単語を分ける
 //返り値は今の文字だが呼び出した関数は主にフラグをみる
 char getWord(){
-  char wch;                               //今の文字
+  char wch;                                                         //今の文字
 
-  if(nextwch!='\0'){                      //次の文字が空でないなら
-    wch=nextwch;                          //今の文字に次の文字を代入
-    nextwch='\0';                         //次の文字を空にする
+  if(nextwch!='\0'){                                                //次の文字が空でないなら
+    wch=nextwch;                                                    //今の文字に次の文字を代入
+    nextwch='\0';                                                   //次の文字を空にする
   }
-  else{                                   //次の文字が空なら
-    wch=getH();                           //今の文字取得
+  else{                                                             //次の文字が空なら
+    wch=getH();                                                     //今の文字取得
   }
 
-  nextwch=getH();                         //次の文字取得
+  nextwch=getH();                                                   //次の文字取得
 
-  if(isAlnum(wch) || wch=='.'){           //今の文字が 0~9 a~z A~Z '.'のどれかなら
-    linehead=false;                       //lineheadをオフ
-    wordflag=true;                        //wordflagをオン
-    if(!isAlnum(nextwch) && nextwch!='.'){//次の文字が記号なら
-      if(nextwch=='\"' && !sentense)      //終わりの'\"'なら
-        wordflag=true;                    //wordflagをオン
-      else                                //始まりの'\"'なら
-        wordflag=false;                   //wordflagをオフ
+  if(isAlnum(wch) || wch=='.' || wch=='_'){                         //今の文字が 0~9 a~z A~Z '.' '_'のどれかなら
+    linehead=false;                                                 //lineheadをオフ
+    wordflag=true;                                                  //wordflagをオン
+    if(!isAlnum(nextwch) && nextwch!='.' && nextwch!='_'){          //次の文字が記号なら
+      if(nextwch=='\"' && !sentense)                                //終わりの'\"'なら
+        wordflag=true;                                              //wordflagをオン
+      else                                                          //始まりの'\"'なら
+        wordflag=false;                                             //wordflagをオフ
     }
   }
-  else if(wch==' ' && !argspace){         //今の文字が' 'なら
-    if(linehead){                         //行の先頭なら
-      wordspace=false;                    //wordspaceをオフ
-        return wch;                       //今の文字を返す（スペース）
+  else if(wch==' ' && !argspace){                                   //今の文字が' 'なら
+    if(linehead){                                                   //行の先頭なら
+      wordspace=false;                                              //wordspaceをオフ
+        return wch;                                                 //今の文字を返す（スペース）
     }
-    else if(wordspace){                   //wordspaceがオンなら
-      wordspace=false;                    //wordspaceをオフ
-      while(nextwch==' ')                 //次の文字が' 'の間１つだけ' 'を返して他の' 'は飛ばす
-        nextwch=getH();                   //次の文字取得
-      return wch;                         //今の文字を返す（スペース）
+    else if(wordspace){                                             //wordspaceがオンなら
+      wordspace=false;                                              //wordspaceをオフ
+      while(nextwch==' ')                                           //次の文字が' 'の間１つだけ' 'を返して他の' 'は飛ばす
+        nextwch=getH();                                             //次の文字取得
+      return wch;                                                   //今の文字を返す（スペース）
     }
   }
-  else if(wch=='\"'){                     //今の文字が'\"'なら
-    if(sentense)                          //sentenseがオンなら
-      wordflag=true;                      //wordflagをオン
-    else                                  //sentenseがオフなら
-      wordflag=false;                     //wordflagをオフ
+  else if(wch=='\"'){                                               //今の文字が'\"'なら
+    if(sentense)                                                    //sentenseがオンなら
+      wordflag=true;                                                //wordflagをオン
+    else                                                            //sentenseがオフなら
+      wordflag=false;                                               //wordflagをオフ
   }
-  else{                                   //今の文字が記号なら
-    linehead=false;                       //lineheadをオフ
-    wordflag=false;                       //wordflagをオフ
+  else{                                                             //今の文字が記号なら
+    linehead=false;                                                 //lineheadをオフ
+    wordflag=false;                                                 //wordflagをオフ
   }
 
-  if(nextwch==' ')                        //次の文字が' 'なら
-    wordspace=true;                       //wordspaceをオン
+  if(nextwch==' ')                                                  //次の文字が' 'なら
+    wordspace=true;                                                 //wordspaceをオン
 
-  return wch;                             //今の文字を返す
+  return wch;                                                       //今の文字を返す
 }
 
 
@@ -613,6 +613,7 @@ int do_include(){
       do_error("\"...\"でない");                           //"..."ではない記述エラー
     for(i=1;word[i]!='\"';i=i+1)                          //"..."の...の間
       includename[i-1]=word[i];                           //ファイル名として保存
+    includename=strCat(includename,"\0");                 //'\0'追加
   }
   else if(word[0]=='<'){                                  //<...>なら
     includename=strCpy(includename,"/usr/local/cmmInclude/");//パスを先頭に記述
@@ -632,7 +633,7 @@ int do_include(){
     while(strCmp(word,"\n")!=0)                           //改行でない間
       lexical();                                          //１単語取得
   }
-  saveincdepth(linenum,byteh,bytel-1);                      //今のファイル名の読み込みバイト数と行数を保存
+  saveincdepth(linenum,byteh,bytel-1);                    //今のファイル名の読み込みバイト数と行数を保存
   isp=makeincdepth(includename);                          //includeのファイル名を登録
   fd=fopen(incdepth[isp].name,"r");                       //includeのファイル名でオープン
   if(fd==null){                                           //ファイルが存在しない
@@ -767,7 +768,7 @@ int do_endif(){
   ifdepth[sp]=0;                              //条件を初期化
   sp=sp-1;                                    //spwp減算
   if(sp<0)                                    //spが負の値なら
-    do_error("#ifと#elseの数が合わない");       //#ifと#endifの数が合わないエラー
+    do_error("#ifと#elseの数が合わない");        //#ifと#endifの数が合わないエラー
   elseflag=false;                             //elseflagをオフ
   return 0;                                   //正常終了
 }
@@ -856,9 +857,13 @@ public int main(int argc,char[][] argv){
         int n=searchdef(word);                //マクロ名を探索
         if(n!=-1){                            //マクロ名なら
           submacro=word;                      //マクロ名を保持
-          subarg=getArg();                    //引数を取得
-          if(narg!=deftable[n].narg)          //引数の数が合わないなら
-            do_error("マクロに引数がない");      //引数の数が合わないエラー
+          if(deftable[n].narg!=0){            //引数を持つなら
+            subarg=getArg();                  //引数を取得
+            if(narg!=deftable[n].narg)        //引数の数が合わないなら
+              do_error("マクロに引数がない");    //引数の数が合わないエラー
+          }
+          else                                //引数を持たないなら
+            subarg=null;                      //nullにする
           ipbuf=replacedef(submacro,subarg);  //bufferにマクロを展開
         }
         output();                             //文字印字
@@ -893,7 +898,6 @@ public int main(int argc,char[][] argv){
       if(strCmp(word,"\n")==0)                //今の単語が'\n'なら
         output();                             //文字印字
     }
-
     if(type==T_ELSE){                         //#elseなら
       lexflag=false;                          //lexflagをオフ
       do_else();                              //do_else()呼び出し
@@ -936,6 +940,7 @@ public int main(int argc,char[][] argv){
       nextwch='\0';                           //次の文字を初期化
       fputc('\n',op);                         //改行を印字
       lineoutput();                           //ファイルの始まり
+      eofflag=false;                          //eofflagを戻す
     }
   }
   if(sp!=0)                                   //#if #elseの数が0でない
