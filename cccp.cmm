@@ -2,9 +2,9 @@
 #include <stdlib.hmm>
 #include <string.hmm>
 #include <ctype.hmm>
-#include "./type.hmm"
-#include "./difinition.hmm"
-#include "./including.hmm"
+#include "type.hmm"
+#include "definition.hmm"
+#include "including.hmm"
 
 #define INPUTSIZE 50                            //単語のマックスサイズ
 #define ARGSIZE 5                               //マクロの引数数。内一つはnull用
@@ -19,7 +19,7 @@ public definition[] deftable=array(TABLESIZE);  //deftableの初期化
 public filelist[] incdepth=array(INDEPTHSIZE);  //includeのdepthの初期化
 FILE fd;                                        //入力ファイル
 FILE op;                                        //出力ファイル
-unsigned char[] ipbuf=array(INPUTSIZE);         //入力ファイル用バッファ
+char[] ipbuf=array(INPUTSIZE);         //入力ファイル用バッファ
 char[] word;                                    //単語用バッファ
 boolean eofflag=false;                          //EOF用フラグ
 int[] ifdepth=array(IFDEPTH);                   //ifの入れ子用スタック
@@ -29,6 +29,15 @@ int isp=0;                                      //includeテーブルのスタ�
 int linenum=1;                                  //行番号
 int bytel=0;                                    //下位16bitのbyte数
 int byteh=0;                                    //上位16bitのbyte数
+
+
+
+//エラー強制終了
+void do_error(char[] ers){
+  printf("%s:line %d ",incdepth[isp].name,linenum);   //エラーファイル名と行番号出力
+  puts(ers);                                            //エラーを出力
+  exit(1);                                              //強制終了
+}
 
 
 
@@ -58,13 +67,11 @@ char getL(){
     byteplus();                       //見た文字の数だけbyteを加算
     return lch;                       //今の文字を返す
   }
-
   else if(nextlch=='\\'){             //次の文字が'\\'なら
     lch=nextlch;                      //今の文字は次の文字を見る
     nextlch='\0';                     //次の文字を空にする
-    byte=byte+sizeof(char);           //見た文字の数だけbyteを加算
+    byteplus();                       //見た文字の数だけbyteを加算
   }
-
   else{                               //次の文字が空なら
     if(!feof(fd)){                    //eofでないなら
       lch=fgetc(fd);                  //今の文字を入力
@@ -86,6 +93,7 @@ char getL(){
     }
 
     if(nextlch=='\n'){                //次の文字が改行なら
+      byteplus();
       linenum=linenum+1;              //行数をインクリメント
       if(!feof(fd)){                  //eofでないなら
         do{                           //結合時に' 'は削除して結合するため、以降' 'である間は続く
@@ -107,9 +115,6 @@ char getL(){
     else                              //次の文字が改行でないなら
       return lch;                     //今の文字を返す
   }
-
-  if(lch=='\n')                       //今の文字が改行なら
-    linenum=linenum+1;                //改行回数を加算
 
   return lch;                         //今の文字を返す
 }
@@ -162,8 +167,10 @@ char getH(){
       commentflag=true;               //commentflagをオン
       while(commentflag){             //commentflagがオンの間
         while(hch!='*'){              //今の文字が'*'出ない間
-          if(hch=='\n')               //改行なら
+          if(hch=='\n'){              //改行なら
+            linenum=linenum+1;        //行数を加算
             enterhcnt=enterhcnt+1;    //改行数を加算
+          }
           hch=getL();                 //１文字取得
           if(eofflag){                //eofflagがオンなら
             return hch;               //eofであるから改行を返すはず
@@ -300,10 +307,16 @@ int lexical(){
   word[wordn]=buf;                                //最後の１文字を代入
   wordn=wordn+1;                                  //現在単語位置をインクリメント
   word[wordn]='\0';                               //'\0'を代入
+  if(word[0]=='\n'){                              //今の文字が改行なら
+    linenum=linenum+1;                            //改行回数を加算
+  }
 
   wordlen=strLen(word);                           //単語の文字数を取得
 
   if(lexflag){                                    //'#'があったなら
+    if(strCmp(word,"define")==0){                 //"#define"なら
+      return T_DEFINE;                            //T_DEFINEを返す
+    }
     if(strCmp(word,"Edefine")==0){                //"#Edefine"なら
       return T_EDEFINE;                           //T_EDEFINEを返す
     }
@@ -373,11 +386,10 @@ char[] lexarg(){
     if(strCmp(word,")")==0 && parentcnt==0)       //()がなく、単語が')'なら
       break;                                      //引数の終わりの')'
     if(strCmp(word,"\n")==0 || eofflag){          //eofまたは改行なら
-//引数が途中で切れているエラー
-      break;
+      do_error("マクロの引数の記述が正しくない");      //引数が途中で切れているエラー
     }
     if(strCmp(word,"(")==0)                       //'('なら
-      parentcnt=parentcnt+1;　                    //parentcntを加算
+      parentcnt=parentcnt+1;                      //parentcntを加算
     else if(strCmp(word,")")==0)                  //')'なら
       parentcnt=parentcnt-1;                      //parentcntを減算
     arg=strCat(arg,word);                         //引数文字列に単語を追加
@@ -408,10 +420,8 @@ char[][] getArg(){
       narg=narg+1;                                //引数数を加算
     }
     if(strCmp(word,")")!=0)                       //単語が')'でないなら
-//引数が正しく終わっていないエラー
-      narg=narg;
+      do_error("マクロの引数の記述が正しくない");      //引数が正しく終わっていないエラー
   }
-
   args[narg]=null;                                //引数配列の終わりをnullにする
   argspace=false;                                 //argspaceをオフ
 
@@ -424,7 +434,7 @@ char[][] getArg(){
 //定義本体の引数の位置やマクロ名の入子を処理する
 //返り値は定義本体
 char[] getDef(char[] mname,char[][] arg){
-  char[] buffer=malloc(sizeof(char)*INPUTSIZE);   //
+  char[] buffer=malloc(sizeof(char)*INPUTSIZE);   //bufferの初期化
   int wordn=0;                                    //単語の出現番号、引数の出現時に使う
   char[] submacro;                                //途中で見つけたマクロ名を保持
   char[][] subarg;                                //定義本体中のマクロの引数
@@ -437,8 +447,7 @@ char[] getDef(char[] mname,char[][] arg){
     for(i=0;i<subnarg;i=i+1){                     //引数と同じかどうかのループ
       if(strCmp(arg[i],word)==0){                 //引数と同じなら
         if(makelist(mname,i,wordn)==-1)           //リストに登録
-//リストの登録不可のエラー
-          return null;
+          do_error("マクロの引数リストに登録できない");//リストの登録不可のエラー
       }
     }
 
@@ -462,6 +471,8 @@ char[] getDef(char[] mname,char[][] arg){
     wordn=wordn+1;                                //単語の出現番号を加算
   }
   buffer=strCat(buffer,"\0");                     //bufferに'\0'を代入
+  if(strCmp(buffer,"\0")==0)                      //bufferが空なら
+    return null;                                  //nullを返す
   return buffer;                                  //bufferを返す
 }
 
@@ -476,8 +487,7 @@ char[][] do_makeMname(){
   char[][] args;                                  //引数用２次元配列
 
   if(eofflag)                                     //eofflagがオンなら
-//マクロの定義が正常に終わっていないエラー
-    return null;
+    do_error("マクロの定義が正しく終了していない");    //マクロの定義が正常に終わっていないエラー
 
   type=skipspace();                               //スペースをスキップ
   macroname=word;                                 //マクロ名を保持
@@ -488,23 +498,38 @@ char[][] do_makeMname(){
       int i=0;
       for(i=0;i<narg;i=i+1){                      //引数の数だけループ
         if(!isAlpha(args[i][0]))                  //引数の最初の文字がアルファベットでないなら
-//引数名不可エラー
-          return null;
+          do_error("マクロの引数の名前はアルファベットから");//引数名不可エラー
       }
       if(makemacro(macroname,narg)==-1)           //マクロ名の登録
-//登録不可のエラー
-        return null;
+        do_error("マクロ名が登録できない");           //登録不可のエラー
     }
     else{                                         //マクロ名の最初がアルファベットでないなら
-//アルファベットから始まらないマクロ名不可エラー
-      return null;
+      do_error("マクロ名はアルファベットから");        //アルファベットから始まらないマクロ名不可エラー
     }
   }
   else{                                           //マクロ名が特殊な単語なら
-//特殊なマクロ名不可エラー
-    return null;
+    do_error("マクロ名として適していない");           //特殊なマクロ名不可エラー
   }
   return args;                                    //マクロの引数を返す
+}
+
+
+
+//#defineを見つけた
+int do_define(){
+  char[][] args;                                //引数用２次元配列
+  args=do_makeMname();                          //so_makeMname()呼び出し
+  char[] def=malloc(sizeof(char)*INPUTSIZE);    //定義本体用バッファ初期化
+  def=getDef(macroname,args);                   //定義本体取得
+  if(def==null){                                //定義本体がないなら
+    linenum=linenum-1;                          //定義本体があった行に戻る
+    do_error("定義本体が存在しない");              //定義本体が存在しない
+  }
+  if(makedef(macroname,def)==-1){               //定義本体の登録
+    linenum=linenum-1;                          //定義本体があった行に戻る
+    do_error("定義本体登録不可");                 //定義本体の登録不可エラー
+  }
+  return 0;                                     //正常終了
 }
 
 
@@ -512,20 +537,13 @@ char[][] do_makeMname(){
 //#Edefineを見つけた
 int do_Edefine(){
   char[][] args;                                //引数用２次元配列
-
   args=do_makeMname();                          //so_makeMname()呼び出し
-  if(args==null)                                //引数がnullなら
-//何かしらエラーがあった
-    return -1;
-
   char[] def=malloc(sizeof(char)*INPUTSIZE);    //定義本体用バッファ初期化
-
-
   def=getDef(macroname,args);                   //定義本体取得
-  if(def==null)                                 //定義本体がないなら
-//定義本体がないエラー
-    return -1;
-
+  if(def==null){                                //定義本体がないなら
+    linenum=linenum-1;                          //定義本体があった行に戻る
+    do_error("定義本体が存在しない");              //定義本体が存在しない
+  }
   int i=0;
   int cnt=1;                                    //()の数
   if(def[0]=='('){                              //定義本体の先頭が'('なら
@@ -537,18 +555,19 @@ int do_Edefine(){
       if(cnt==0)                                //カウントが0なら
         break;                                  //ループを抜ける
     }
-    if(def[i+1]!='\0')                          //定義本体の最後までいっていないなら
-//()の数エラー
-      return -1;
+    if(def[i+1]!='\0'){                         //定義本体の最後までいっていないなら
+      linenum=linenum-1;                        //定義本体があった行に戻る
+      do_error("()の数があっていない");            //()の数エラー
+    }
   }
-  else                                          //定義本体の先頭が'('でないなら
-//Edefineの仕様に反するエラー
-    return -1;
-
-  if(makedef(macroname,def)==-1)                //定義本体の登録
-//定義本体の登録不可エラー
-    return -1;
-
+  else{                                         //定義本体の先頭が'('でないなら
+    linenum=linenum-1;                          //定義本体があった行に戻る
+    do_error("#Edefineの定義本体には(...)が必要"); //Edefineの仕様に反するエラー
+  }
+  if(makedef(macroname,def)==-1){               //定義本体の登録
+    linenum=linenum-1;                          //定義本体があった行に戻る
+    do_error("定義本体登録不可");                 //定義本体の登録不可エラー
+  }
   return 0;                                     //正常終了
 }
 
@@ -558,45 +577,29 @@ int do_Edefine(){
 int do_Sdefine(){
   char[][] args;                                //引数用二次元配列
   args=do_makeMname();                          //do_makeMname()を呼び出す
-  if(args==null)                                //引数がnullなら
-//何かしらのエラー
-    return -1;
-
   char[] def=malloc(sizeof(char)*INPUTSIZE);    //定義本体用バッファ
-
   def=getDef(macroname,args);                   //定義本体取り出し
-  if(def==null)                                 //定義本体がないなら
-//定義本体がないエラー
-    return -1;
-
-  if(makedef(macroname,def)==-1)                //定義本体の登録
-//定義本体登録不可エラー
-    return -1;
-
+  if(def==null){                                //定義本体がないなら
+    linenum=linenum-1;                          //定義本体があった行に戻る
+    do_error("定義本体が存在しない");              //定義本体がないエラー
+  }
+  if(def[0]=='(' && def[strLen(def)-1]==')')    //定義本体が()で閉じられているなら
+    do_error("#Sdefineの定義本体は()で閉じてはいけない");//#Sdefineの記述エラー
+  if(makedef(macroname,def)==-1){               //定義本体の登録
+    linenum=linenum-1;                          //定義本体があった行に戻る
+    do_error("定義本体登録不可");                 //定義本体登録不可エラー
+  }
   return 0;                                     //正常終了
 }
 
 
 
-#define LINEC(l) #l                                         //行数を文字列にするため
 //# 行番号　ファイル名を出力
 void lineoutput(){
-  int len=0;                                                //文字列の長さ
-  fputc('#',op);                                            //'#'を印字
-  fputc(' ',op);                                            //スペースを印字
-  char[] linec=LINEC(linenum);                              //行数を文字列化
-  len=strLen(linec);                                        //行数の長さ取得
-  int i=0;
-  for(i=0;i<len;i=i+1)                                      //文字数だけループ
-    fputc(linec[i],op);                                     //行数印字
-  fputc(' ',op);                                            //スペース印字
-  fputc('\"',op);                                           //'\"'を印字
-  len=strLen(incdepth[isp].name);                           //ファイル名の長さ取得
-  for(i=0;i<len;i=i+1)                                      //文字数だけループ
-    fputc(incdepth[isp].name[i]);                           //ファイル名印字
-  fputc('\"',op);                                           //'\"'を印字
-  fputc('\n',op);                                           //改行
+  fprintf(op,"# %d \"%s\"\n",linenum,incdepth[isp].name); //行数とファイル名印字
 }
+
+
 
 //#includeを見つけた
 int do_include(){
@@ -607,11 +610,12 @@ int do_include(){
   if(type==T_MOJI){                                       //"..."なら
     int i=0;
     if(word[i]=='\'')                                     //'x'なら
-//"..."ではない記述エラー
+      do_error("\"...\"でない");                           //"..."ではない記述エラー
     for(i=1;word[i]!='\"';i=i+1)                          //"..."の...の間
       includename[i-1]=word[i];                           //ファイル名として保存
   }
   else if(word[0]=='<'){                                  //<...>なら
+    includename=strCpy(includename,"/usr/local/cmmInclude/");//パスを先頭に記述
     lexical();                                            //単語取得
     while(word[0]!='>'){                                  //'>'までループ
       includename=strCat(includename,word);               //ファイル名として追加
@@ -619,21 +623,29 @@ int do_include(){
     }
   }
   else                                                    //"..."でも<...>でもないなら
-//includeの記述に反するエラー
+    do_error("#includeは<...>または\"...\"");              //includeの記述に反するエラー
 
   lexical();                                              //１単語取得
   if(strCmp(word,"\n")!=0){                               //改行でないなら
     lexical();                                            //１単語取得
-//#includeの記述に反するwarning
+    do_error("余計な単語がある");                            //#includeの記述に反するwarning
     while(strCmp(word,"\n")!=0)                           //改行でない間
       lexical();                                          //１単語取得
   }
-  saveincdepth(linenum,byteh,bytel);                      //今のファイル名の読み込みバイト数と行すうを保存
+  saveincdepth(linenum,byteh,bytel-1);                      //今のファイル名の読み込みバイト数と行数を保存
   isp=makeincdepth(includename);                          //includeのファイル名を登録
   fd=fopen(incdepth[isp].name,"r");                       //includeのファイル名でオープン
+  if(fd==null){                                           //ファイルが存在しない
+    isp=isp-1;                                            //今のファイルにスタックポインタ移動
+    linenum=linenum-1;                                    //行数を戻す
+    do_error("includeのファイルが存在しない");                //ファイルがないエラー
+  }
   byteh=0;                                                //bytehの初期化
   bytel=0;                                                //bytelの初期化
   linenum=1;                                              //linenumの初期化
+  nexthch='\0';                                           //次の文字を初期化
+  nextlch='\0';                                           //次の文字を初期化
+  nextwch='\0';                                           //次の文字を初期化
   lineoutput();                                           //ファイルの始まりを印字
   return 0;                                               //正常終了
 }
@@ -755,8 +767,7 @@ int do_endif(){
   ifdepth[sp]=0;                              //条件を初期化
   sp=sp-1;                                    //spwp減算
   if(sp<0)                                    //spが負の値なら
-//#ifと#endifの数が合わないエラー
-  return -1;
+    do_error("#ifと#elseの数が合わない");       //#ifと#endifの数が合わないエラー
   elseflag=false;                             //elseflagをオフ
   return 0;                                   //正常終了
 }
@@ -778,19 +789,8 @@ int conditioncheck(){
 int do_undef(){
   skipspace();                                //スペースをスキップ
   if(deletedef(word)==-1)                     //マクロ名を消去
-//消去不可のエラー
-    return -1;
+    do_error("undef不可");                    //消去不可のエラー
   return 0;                                   //正常終了
-}
-
-
-void do_error(){
-
-}
-
-
-void construction(){
-
 }
 
 
@@ -810,6 +810,15 @@ char[] dotdelete(char[] str){
 
 
 
+//bufferの出力
+void output(){
+  int i=0;
+  for(i=0;ipbuf[i]!='\0';i=i+1)       //bufferの終わりまでループ
+    fputc(ipbuf[i],op);               //bufferを印字
+}
+
+
+
 public int main(int argc,char[][] argv){
   char[] bufer;                               //マクロ展開時用バッファ
   char[] opname;                              //出力ファイル名
@@ -821,17 +830,17 @@ public int main(int argc,char[][] argv){
 
   isp=makeincdepth(argv[1]);                  //ソースファイルをテーブルに追加
   fd=fopen(incdepth[isp].name,"r");           //入力ファイルオープン
-  lineoutput();                               //ファイルの始まり
   opname=dotdelete(argv[1]);                  //出力ファイル名の'.'以前を取得
   opname=strCat(opname,".i\0");               //出力ファイル名作成
   op=fopen(opname,"w");                       //出力ファイルオープン
+  lineoutput();                               //ファイルの始まり
 
   char[][] subarg;                            //引数用２次元配列
   char[] submacro;                            //マクロ名
   ifdepth[sp]=1;                              //ifdepthの最初は常に１
 
   while(!feof(fd)){                           //入力ファイルから単語を読み込み
-    type=lexical()                            //入力の単語のタイプ
+    type=lexical();                           //入力の単語のタイプ
     if(word[0]=='#'){                         //'#'を見つけたなら
       lexflag=true;                           //lexflagをオン
       continue;                               //ループの最初に戻る
@@ -840,9 +849,7 @@ public int main(int argc,char[][] argv){
       if(type==T_MOJI || type==T_OTHER){      //"..."または'x'またはただの単語なら
         if(lexflag){                          //'#'を見つけていたら
           fputc('#',op);                      //'#'を印字
-          int i=0;
-          for(i=0;ipbuf[i]!='\0';i=i+1)       //bufferの終わりまでループ
-            fputc(ipbuf[i],op);               //bufferを印字
+          output();                           //文字印字
           lexflag=false;                      //lexflagをオフ
           continue;                           //ループの最初に戻る
         }
@@ -850,21 +857,26 @@ public int main(int argc,char[][] argv){
         if(n!=-1){                            //マクロ名なら
           submacro=word;                      //マクロ名を保持
           subarg=getArg();                    //引数を取得
+          if(narg!=deftable[n].narg)          //引数の数が合わないなら
+            do_error("マクロに引数がない");      //引数の数が合わないエラー
           ipbuf=replacedef(submacro,subarg);  //bufferにマクロを展開
         }
-        int i=0;
-        for(i=0;ipbuf[i]!='\0';i=i+1)         //buffreの終わりまでループ
-          fputc(ipbuf[i],op);                 //bufferを印字
+        output();                             //文字印字
+      }
+      else if(type==T_DEFINE){                //#defineなら
+        lexflag=false;                        //lexflagをオフ
+        do_define();                          //do_define()を呼び出し
+        output();                             //文字位置
       }
       else if(type==T_EDEFINE){               //#Edefineなら
         lexflag=false;                        //lexflagをオフ
-        fputc('\n',op);                       //改行を印字
         do_Edefine();                         //do_Edefine()呼び出し
+        output();                             //文字印字
       }
       else if(type==T_SDEFINE){               //#Sdefineなら
         lexflag=false;                        //lexflagをオフ
-        fputc('\n',op);                      //改行を印字
         do_Sdefine();                         //do_Sdefine()呼び出し
+        output();                             //文字印字
       }
       else if(type==T_INCLUDE){               //#includeなら
         lexflag=false;                        //lexflagをオフ
@@ -872,14 +884,14 @@ public int main(int argc,char[][] argv){
       }
       else if(type==T_UNDEF){                 //#undefなら
         lexflag=false;                        //lexflagをオフ
-        fputc('\n',op);                       //改行を印字
         do_undef();                           //do_undef()呼び出し
+        output();                             //文字印字
       }
     }
     else{                                     //#if #elseの条件が不成立なら
       lexflag=false;                          //lexflagをオフ
       if(strCmp(word,"\n")==0)                //今の単語が'\n'なら
-        fputc('\n',op);                       //改行を印字
+        output();                             //文字印字
     }
 
     if(type==T_ELSE){                         //#elseなら
@@ -919,9 +931,15 @@ public int main(int argc,char[][] argv){
       byteh=incdepth[isp].dbyteh;             //dbytehを取得
       bytel=incdepth[isp].dbytel;             //dbytelを取得
       linenum=incdepth[isp].linen;            //linenumを取得
+      nexthch='\0';                           //次の文字を初期化
+      nextlch='\0';                           //次の文字を初期化
+      nextwch='\0';                           //次の文字を初期化
+      fputc('\n',op);                         //改行を印字
       lineoutput();                           //ファイルの始まり
     }
   }
+  if(sp!=0)                                   //#if #elseの数が0でない
+    do_error("#endの数が合わない");              //#endの数が合わない
   fclose(fd);                                 //入力ファイルをクローズ
   fclose(op);
   return 0;
