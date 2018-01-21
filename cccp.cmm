@@ -24,7 +24,9 @@ char[] word;                                    //単語用バッファ
 boolean eofflag=false;                          //EOF用フラグ
 int[] ifdepth=array(IFDEPTH);                   //ifの入れ子用スタック
 int sp=0;                                       //ifdepth用スタックポインタ
-boolean elseflag=false;                         //複数elseの内１つでも条件が成立した時のフラグ
+boolean ifflag=false;                           //ifを見つけた時のフラグ
+boolean elseflag=false;                         //elseを見つけた時のフラグ
+boolean conditionflag=false;                    //#if #elseなどの条件フラグ
 int isp=0;                                      //includeテーブルのスタックポインタ
 int linenum=1;                                  //行番号
 int bytel=0;                                    //下位16bitのbyte数
@@ -34,7 +36,7 @@ int byteh=0;                                    //上位16bitのbyte数
 
 //エラー強制終了
 void do_error(char[] ers){
-  printf("%s:line %d:",incdepth[isp].name,linenum);   //エラーファイル名と行番号出力
+  printf("%s:line %d:",incdepth[isp].name,linenum);     //エラーファイル名と行番号出力
   puts(ers);                                            //エラーを出力
   exit(1);                                              //強制終了
 }
@@ -124,6 +126,8 @@ char getL(){
 int enterhcnt=0;                      // /*~*/の中の改行の数
 char nexthch='\0';                    //getH()用の次文字
 boolean sentense=false;               //"..."または'x'用のフラグ
+boolean backflag=false;               //'\\'用のフラグ
+boolean backsent=false;               //'\"'と'\''用のフラグ
 
 // コメントを削除する１文字入力
 char getH(){
@@ -138,11 +142,12 @@ char getH(){
 
   hch=getL();                         //今の文字取得
 
-  if(hch=='\"'){                      //今の文字が'\"'なら
+  if(hch=='\"' || hch=='\''){         //今の文字が'\"'または'\''なら
     if(!sentense)                     //sentenseがオンでないなら
       sentense=true;                  //sentenseをオン
-    else
+    else{
       sentense=false;                 //sentenseをオフ
+    }
   }
 
   if(sentense)                        //sentenseがオンなら
@@ -219,11 +224,25 @@ char getWord(){
 
   nextwch=getH();                                                   //次の文字取得
 
+  if(sentense && nextwch!='\"'){                                    //sentenseがオンで最初の'\'"でない
+    if(nextwch!='\''){                                              //最初の'\''でない
+      backflag=false;                                               //backflagをオフ
+      backsent=false;                                               //backsentをオフ
+      if(wch=='\\' && nextwch=='\\'){                               //"\\"という表記なら
+        backflag=true;                                              //backflagをオン
+      }
+      wordflag=true;                                                //wordflagをオン
+      return wch;                                                   //今の文字を返す
+    }
+  }
+
   if(isAlnum(wch) || wch=='.' || wch=='_'){                         //今の文字が 0~9 a~z A~Z '.' '_'のどれかなら
     linehead=false;                                                 //lineheadをオフ
     wordflag=true;                                                  //wordflagをオン
     if(!isAlnum(nextwch) && nextwch!='.' && nextwch!='_'){          //次の文字が記号なら
       if(nextwch=='\"' && !sentense)                                //終わりの'\"'なら
+        wordflag=true;                                              //wordflagをオン
+      else if(nextwch=='\'' && !sentense)                           //終わりの'\''なら
         wordflag=true;                                              //wordflagをオン
       else                                                          //始まりの'\"'なら
         wordflag=false;                                             //wordflagをオフ
@@ -236,20 +255,65 @@ char getWord(){
     }
     else if(wordspace){                                             //wordspaceがオンなら
       wordspace=false;                                              //wordspaceをオフ
-      while(nextwch==' ')                                           //次の文字が' 'の間１つだけ' 'を返して他の' 'は飛ばす
+      while(nextwch==' ')                                           //次の文字が空欄の間
         nextwch=getH();                                             //次の文字取得
       return wch;                                                   //今の文字を返す（スペース）
     }
   }
-  else if(wch=='\"'){                                               //今の文字が'\"'なら
+  else if(wch=='\"' || wch=='\''){                                  //今の文字が'\"'または'\''なら
+    linehead=false;                                                 //lineheadをオフ
     if(sentense)                                                    //sentenseがオンなら
       wordflag=true;                                                //wordflagをオン
     else                                                            //sentenseがオフなら
-      wordflag=false;                                               //wordflagをオフ
+      if(backsent){                                                 //backsentがオンなら
+        wordflag=true;                                              //wordflagをオン
+        backsent=false;                                             //backsentをオフ
+      }
+      else                                                          //backsentがオフなら
+        wordflag=false;                                             //wordflagをオフ
+  }
+  else if(wch=='\\' && nextwch=='\"'){                             //"\""という表記なら
+    if(backflag){                                                  //backflagがオンなら
+      if(sentense)                                                 //sentenseがオンなら
+        wordflag=false;                                            //wordflagをオフ
+      else                                                         //sentenseがオフなら
+        wordflag=true;                                             //wordflagをオン
+    }
+    else{                                                          //backflagがオフなら
+      backsent=true;                                               //backsentをオン
+      if(sentense)                                                 //sentenseがオンなら
+        sentense=false;                                            //sentenseをオフ
+      else{                                                        //sentenseがオフなら
+        wordflag=true;                                             //wordflagをオフ
+        sentense=true;                                             //sentenseをオン
+      }
+    }
+  }
+  else if(wch=='\\' && nextwch=='\''){                              //"\'"という表記なら
+    if(backflag){                                                   //backflagがオンなら
+      if(sentense)                                                  //sentenseがオンなら
+        wordflag=false;                                             //wordflagをオフ
+      else                                                          //sentenseがオフなら
+        wordflag=true;                                              //wordflagをオン
+    }
+    else{                                                           //backflagがオフなら
+      backsent=true;                                                //backsentをオン
+      if(sentense)                                                  //sentenseがオンなら
+        sentense=false;                                             //sentenseをオフ
+      else{                                                         //sentenseがオフなら
+        wordflag=true;                                              //wordflagをオフ
+        sentense=true;                                              //sentenseをオン
+      }
+    }
   }
   else{                                                             //今の文字が記号なら
     linehead=false;                                                 //lineheadをオフ
-    wordflag=false;                                                 //wordflagをオフ
+    if(nextwch=='\"' && !sentense)                                  //終わりの'\"'なら
+      wordflag=true;                                                //wordflagをオン
+    else if(nextwch=='\'' && !sentense)                             //終わりの'\''なら
+      wordflag=true;                                                //wordflagをオン
+    else                                                            //始まりの'\"'なら
+      wordflag=false;                                               //wordflagをオフ
   }
 
   if(nextwch==' ')                                                  //次の文字が' 'なら
@@ -623,8 +687,9 @@ int do_include(){
       lexical();                                          //単語取得
     }
   }
-  else                                                    //"..."でも<...>でもないなら
+  else{                                                    //"..."でも<...>でもないなら
     do_error("#includeは<...>または\"...\"");              //includeの記述に反するエラー
+  }
 
   lexical();                                              //１単語取得
   if(strCmp(word,"\n")!=0){                               //改行でないなら
@@ -847,6 +912,8 @@ public int main(int argc,char[][] argv){
       continue;                               //ループの最初に戻る
     }
     if(ifdepth[sp]==1){                       //#if #elseの条件が成立している
+      if(type==T_MOJI)
+        printf("%d:[%s]\n",linenum,ipbuf);
       if(type==T_MOJI || type==T_OTHER){      //"..."または'x'またはただの単語なら
         if(lexflag){                          //'#'を見つけていたら
           fputc('#',op);                      //'#'を印字
@@ -944,7 +1011,7 @@ public int main(int argc,char[][] argv){
     }
   }
   if(sp!=0)                                   //#if #elseの数が0でない
-    do_error("#endの数が合わない");              //#endの数が合わない
+    do_error("#endの数が合わない");             //#endの数が合わない
   fclose(fd);                                 //入力ファイルをクローズ
   fclose(op);
   return 0;
