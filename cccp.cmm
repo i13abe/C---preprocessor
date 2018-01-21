@@ -5,28 +5,26 @@
 #include "type.hmm"
 #include "definition.hmm"
 #include "including.hmm"
+#include "condition.hmm"
 
 #define INPUTSIZE 50                            //単語のマックスサイズ
 #define ARGSIZE 5                               //マクロの引数数。内一つはnull用
 #define TABLESIZE 20                            //definitionテーブルのサイズ
 #define INDEPTHSIZE 10                          //includeの入れ子サイズ
+#define IFDEPTH 10                              //ifdefなどの入れ子の深さ
 #define INCLUDENAME 50                          //includeのファイル名の大きさ
-#define IFDEPTH 10                              //ifの入れ子の深さ
 
 
 
 public definition[] deftable=array(TABLESIZE);  //deftableの初期化
-public filelist[] incdepth=array(INDEPTHSIZE);  //includeのdepthの初期化
+public filelist[] incdepth=array(INDEPTHSIZE);  //incdepthの初期化
+public ifelse[] iftable=array(IFDEPTH);         //ifdepthの初期化
 FILE fd;                                        //入力ファイル
 FILE op;                                        //出力ファイル
 char[] ipbuf=array(INPUTSIZE);                  //入力ファイル用バッファ
 char[] word;                                    //単語用バッファ
 boolean eofflag=false;                          //EOF用フラグ
-int[] ifdepth=array(IFDEPTH);                   //ifの入れ子用スタック
 int sp=0;                                       //ifdepth用スタックポインタ
-boolean ifflag=false;                           //ifを見つけた時のフラグ
-boolean elseflag=false;                         //elseを見つけた時のフラグ
-boolean conditionflag=false;                    //#if #elseなどの条件フラグ
 int isp=0;                                      //includeテーブルのスタックポインタ
 int linenum=1;                                  //行番号
 int bytel=0;                                    //下位16bitのbyte数
@@ -720,121 +718,67 @@ int do_include(){
 
 //#ifdefを見つけた
 int do_ifdef(int con){
-  elseflag=false;                             //elseflagをオフ
-  if(ifdepth[sp]==1){                         //今のif条件が成立なら
-    sp=sp+1;                                  //spを加算
-    if(con==1){                               //条件が成立するなら
-      ifdepth[sp]=1;                          //成立を表す
-      elseflag=true;                          //elseflagをオン
-    }
-    else{                                     //条件が不成立なら
-      ifdepth[sp]=0;                          //不成立を表す
-    }
-  }
-  else{                                       //今のif条件が不成立なら
-    sp=sp+1;                                  //spを加算
-    ifdepth[sp]=0;                            //不成立を表す
-  }
-  return 0;                                   //正常終了
+  if(con==1)                                //条件が成立するなら
+    sp=makeif(true);                        //成立を表す
+  else                                      //条件が不成立なら
+    sp=makeif(false);                       //不成立を表す
+  return 0;                                 //正常終了
 }
 
 
 
 //#ifndefを見つけた
 int do_ifndef(int con){
-  elseflag=false;                             //elseflagをオフ
-  if(ifdepth[sp]==1){                         //今のif条件が成立なら
-    sp=sp+1;                                  //spを加算
-    if(con==0){                               //条件が成立するなら
-      ifdepth[sp]=1;                          //成立を表す
-      elseflag=true;                          //elseflagをオン
-    }
-    else{                                     //条件が不成立なら
-      ifdepth[sp]=0;                          //不成立を表す
-    }
-  }
-  else{                                       //今のif条件が不成立なら
-    sp=sp+1;                                  //spを加算
-    ifdepth[sp]=0;                            //不成立を表す
-  }
-  return 0;                                   //正常終了
+  if(con==0)                                //条件が成立するなら
+    sp=makeif(true);                        //成立を表す
+  else                                      //条件が不成立なら
+    sp=makeif(false);                       //不成立を表す
+  return 0;                                 //正常終了
 }
 
 
 
 //#elseを見つけた
 int do_else(){
-  if(ifdepth[sp-1]==1){                       //１つ上のif条件が成立しているなら
-    if(ifdepth[sp]==1 || elseflag){           //今の条件が成立またはelseflagがオンなら
-      ifdepth[sp]=0;                          //不成立を表す
-    }
-    else{                                     //今条件が不成立かつelseflagがオフなら
-      ifdepth[sp]=1;                          //成立を表す
-    }
-  }
-  else{                                       //1つ上のif条件が不成立なら
-    ifdepth[sp]=0;                            //不成立を表す
-  }
-  return 0;                                   //正常終了
+  sp=makeelse();                            //#elseの処理
+  if(sp==-1)                                //spが-1なら
+    do_error("#elseが#if~の後にない");        //エラー処理
+  return 0;                                 //正常終了
 }
 
 
 
 //#elseifdefを見つけた
 int do_elseifdef(int con){
-  if(ifdepth[sp-1]==1){                       //１つ上のif条件が成立しているなら
-    if(elseflag){                             //elseflagがオンなら
-      ifdepth[sp]=0;                          //不成立を表す
-    }
-    else{                                     //elseflagがオフなら
-      if(con==1){                             //条件が成立なら
-        ifdepth[sp]=1;                        //成立を表す
-        elseflag=true;                        //elseflagをオン
-      }
-      else{                                   //条件が不成立なら
-        ifdepth[sp]=0;                        //不成立を表す
-      }
-    }
-  }
-  else{                                       //1津上のif条件が不成立なら
-    ifdepth[sp]=0;                            //不成立を表す
-  }
-  return 0;                                   //正常終了
+  if(con==1)                                                 //条件が成立するなら
+    sp=makeelseif(true);                                     //成立を表す
+  else                                                       //条件が不成立なら
+    sp=makeelseif(false);                                    //不成立を表す
+  if(sp==-1)                                                 //spが-1なら
+    do_error("#elseif~が#if~の後にないか#elseの後ろにある");     //エラー処理
+  return 0;                                                  //正常終了
 }
 
 
 
-//＃elseifんでfを見つけた
+//＃elseifndefを見つけた
 int do_elseifndef(int con){
-  if(ifdepth[sp-1]==1){                       //１つ上のif条件が成立しているなら
-    if(elseflag){                             //elseflagがオンなら
-      ifdepth[sp]=0;                          //不成立を表す
-    }
-    else{                                     //elseflagがオフなら
-      if(con==0){                             //条件が成立するなら
-        ifdepth[sp]=1;                        //成立を表す
-        elseflag=true;                        //eofflagをオン
-      }
-      else{                                   //条件が不成立なら
-        ifdepth[sp]=0;                        //不成立を表す
-      }
-    }
-  }
-  else{                                       //１つ上のif条件が不成立なら
-    ifdepth[sp]=0;                            //不成立を表す
-  }
-  return 0;                                   //正常終了
+  if(con==0)                                                 //条件が成立するなら
+    sp=makeelseif(true);                                     //成立を表す
+  else                                                       //条件が不成立なら
+    sp=makeelseif(false);                                    //不成立を表す
+  if(sp==-1)                                                 //spが-1なら
+    do_error("#elseif~が#if~の後にないか#elseの後ろにある");     //エラー処理
+  return 0;                                                  //正常終了
 }
 
 
 
 //#endifを見つけた
 int do_endif(){
-  ifdepth[sp]=0;                              //条件を初期化
-  sp=sp-1;                                    //spwp減算
+  sp=deleteifel();                            //#ifの深さを減らす
   if(sp<0)                                    //spが負の値なら
-    do_error("#ifと#elseの数が合わない");        //#ifと#endifの数が合わないエラー
-  elseflag=false;                             //elseflagをオフ
+    do_error("#ifと#endifの数が合わない");       //#ifと#endifの数が合わないエラー
   return 0;                                   //正常終了
 }
 
@@ -903,7 +847,7 @@ public int main(int argc,char[][] argv){
 
   char[][] subarg;                            //引数用２次元配列
   char[] submacro;                            //マクロ名
-  ifdepth[sp]=1;                              //ifdepthの最初は常に１
+  sp=makeif(true);                            //0番目は常にtrue
 
   while(!feof(fd)){                           //入力ファイルから単語を読み込み
     type=lexical();                           //入力の単語のタイプ
@@ -911,9 +855,7 @@ public int main(int argc,char[][] argv){
       lexflag=true;                           //lexflagをオン
       continue;                               //ループの最初に戻る
     }
-    if(ifdepth[sp]==1){                       //#if #elseの条件が成立している
-      if(type==T_MOJI)
-        printf("%d:[%s]\n",linenum,ipbuf);
+    if(iftable[sp].condition){                //#if #elseの条件が成立している
       if(type==T_MOJI || type==T_OTHER){      //"..."または'x'またはただの単語なら
         if(lexflag){                          //'#'を見つけていたら
           fputc('#',op);                      //'#'を印字
