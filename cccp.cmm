@@ -9,10 +9,11 @@
 
 #define INPUTSIZE 50                            //単語のマックスサイズ
 #define ARGSIZE 5                               //マクロの引数数。内一つはnull用
-#define TABLESIZE 20                            //definitionテーブルのサイズ
+#define TABLESIZE 50                            //definitionテーブルのサイズ
 #define INDEPTHSIZE 10                          //includeの入れ子サイズ
-#define IFDEPTH 10                              //ifdefなどの入れ子の深さ
 #define INCLUDENAME 50                          //includeのファイル名の大きさ
+#define PATHNUM 5                               //pathの保持数
+#define IFDEPTH 10                              //ifdefなどの入れ子の深さ
 
 
 
@@ -29,6 +30,8 @@ int isp=0;                                      //includeテーブルのスタ�
 int linenum=1;                                  //行番号
 int bytel=0;                                    //下位16bitのbyte数
 int byteh=0;                                    //上位16bitのbyte数
+char[][] incpath;                               //includeのpathを保持
+int ipsp=0;                                     //incpathのスタックポインタ
 
 
 
@@ -433,12 +436,14 @@ int skipspace(){
 
 
 
+char[][] getArg();
 //引数用字句解析
 //引数の場合" "や()の数を保存するため、字句解析を分けた
 char[] lexarg(){
   int parentcnt=0;                                //()の数
   char[] arg;                                     //引数文字列
   arg=malloc(sizeof(char)*ARGSIZE);               //引数文字列の初期化
+  char[][] subarg;                                //引数用配列
 
   lexical();                                      //単語取得
   arg=strCpy(arg,"\0");                           //引数の先頭に'\0'を代入
@@ -454,6 +459,17 @@ char[] lexarg(){
       parentcnt=parentcnt+1;                      //parentcntを加算
     else if(strCmp(word,")")==0)                  //')'なら
       parentcnt=parentcnt-1;                      //parentcntを減算
+    int n=searchdef(word);                        //マクロ名を探索
+    if(n!=-1){                                    //マクロ名なら
+      if(deftable[n].narg!=0){                    //引数を持つなら
+        subarg=getArg();                          //引数を取得
+      }
+      else                                        //引数を持たないなら
+        subarg=null;                              //nullにする
+      word=replacedef(deftable[n].name,subarg);   //マクロを展開
+      if(word==null)                              //wordがnullなら
+        do_error("マクロの引数数が合わない");         //引数の数が合わないエラー
+    }
     arg=strCat(arg,word);                         //引数文字列に単語を追加
     lexical();                                    //単語取得
   }
@@ -462,13 +478,11 @@ char[] lexarg(){
 
 
 
-int narg;                                         //引数数
-
 //(x,y)とかの引数の取り出し
 //返り値は引数
 char[][] getArg(){
   char[][] args;                                  //引数を持つ２次元配列
-  narg=0;                                         //引数数の初期化
+  int narg=0;                                     //引数数の初期化
   argspace=true;                                  //引数の解析をするフラグ
 
   args=malloc(sizeof(char[])*ARGSIZE);            //引数配列の初期化
@@ -486,7 +500,6 @@ char[][] getArg(){
   }
   args[narg]=null;                                //引数配列の終わりをnullにする
   argspace=false;                                 //argspaceをオフ
-
   return args;                                    //引数配列を返す
 }
 
@@ -500,20 +513,20 @@ char[] getDef(char[] mname,char[][] arg){
   int wordn=0;                                    //単語の出現番号、引数の出現時に使う
   char[] submacro;                                //途中で見つけたマクロ名を保持
   char[][] subarg;                                //定義本体中のマクロの引数
-  int subnarg=narg;                               //引数数を保持
 
   skipspace();                                    //スペースをスキップ
 
   while(word[0]!='\n'){                           //改行までループ
     int i=0;
-    for(i=0;i<subnarg;i=i+1){                     //引数と同じかどうかのループ
+    for(i=0;arg[i]!=null;i=i+1){                  //引数と同じかどうかのループ
       if(strCmp(arg[i],word)==0){                 //引数と同じなら
         if(makelist(mname,i,wordn)==-1)           //リストに登録
           do_error("マクロの引数リストに登録できない");//リストの登録不可のエラー
+        break;                                    //ループから抜ける
       }
     }
 
-    if(i==subnarg){                               //引数でないなら
+    if(arg[i]==null){                             //引数でないなら
       int n=searchdef(word);                      //マクロ名を探索
       if(n!=-1){                                  //マクロ名なら
         submacro=word;                            //マクロ名保持
@@ -558,12 +571,12 @@ char[][] do_makeMname(){
     if(isAlpha(word[0])){                         //マクロ名の最初の文字がアルファベットなら
       args=getArg();                              //引数を取得
       int i=0;
-      for(i=0;i<narg;i=i+1){                      //引数の数だけループ
+      for(i=0;args[i]!=null;i=i+1){               //引数の数だけループ
         if(!isAlpha(args[i][0]))                  //引数の最初の文字がアルファベットでないなら
           do_error("マクロの引数の名前はアルファベットから");//引数名不可エラー
       }
-      if(makemacro(macroname,narg)==-1)           //マクロ名の登録
-        do_error("マクロ名が登録できない");           //登録不可のエラー
+      if(makemacro(macroname,i)==-1)              //マクロ名の登録
+        return null;                              //マクロがすでに定義されていたらnullを返す
     }
     else{                                         //マクロ名の最初がアルファベットでないなら
       do_error("マクロ名はアルファベットから");        //アルファベットから始まらないマクロ名不可エラー
@@ -579,79 +592,107 @@ char[][] do_makeMname(){
 
 //#defineを見つけた
 int do_define(){
-  char[][] args;                                //引数用２次元配列
-  args=do_makeMname();                          //so_makeMname()呼び出し
-  char[] def=malloc(sizeof(char)*INPUTSIZE);    //定義本体用バッファ初期化
-  def=getDef(macroname,args);                   //定義本体取得
-  if(def==null){                                //定義本体がないなら
-    linenum=linenum-1;                          //定義本体があった行に戻る
-    do_error("定義本体が存在しない");              //定義本体が存在しない
+  char[][] args;                                  //引数用２次元配列
+  args=do_makeMname();                            //do_makeMname()呼び出し
+
+  char[] def=malloc(sizeof(char)*INPUTSIZE);      //定義本体用バッファ初期化
+  if(args==null){                                 //argsがnullなら
+    args=malloc(sizeof(char[])*1);                //１つだけ要素を持たせる
+    args[0]=null;                                 //先頭をnull
+    def=getDef(macroname,args);                   //定義本体取得
+    int n=searchdef(macroname);                   //マクロ名を探索
+    if(strCmp(def,deftable[n].mdefinition)!=0)    //定義本体が同じなら
+      do_error("マクロ名が２重定義されている");        //２重定義エラー
+    return 0;                                     //正常終了
   }
-  if(makedef(macroname,def)==-1){               //定義本体の登録
-    linenum=linenum-1;                          //定義本体があった行に戻る
-    do_error("定義本体登録不可");                 //定義本体の登録不可エラー
+  def=getDef(macroname,args);                     //定義本体取得
+  if(def==null){                                  //定義本体がないなら
+    linenum=linenum-1;                            //定義本体があった行に戻る
+    do_error("定義本体が存在しない");                //定義本体が存在しない
   }
-  return 0;                                     //正常終了
+  if(makedef(macroname,def)==-1){                 //定義本体の登録
+    linenum=linenum-1;                            //定義本体があった行に戻る
+    do_error("定義本体登録不可");                    //定義本体の登録不可エラー
+  }
+  return 0;                                       //正常終了
 }
 
 
 
 //#Edefineを見つけた
 int do_Edefine(){
-  char[][] args;                                //引数用２次元配列
-  args=do_makeMname();                          //so_makeMname()呼び出し
-  char[] def=malloc(sizeof(char)*INPUTSIZE);    //定義本体用バッファ初期化
-  def=getDef(macroname,args);                   //定義本体取得
-  if(def==null){                                //定義本体がないなら
-    linenum=linenum-1;                          //定義本体があった行に戻る
-    do_error("定義本体が存在しない");              //定義本体が存在しない
+  char[][] args;                                  //引数用２次元配列
+  args=do_makeMname();                            //so_makeMname()呼び出し
+  char[] def=malloc(sizeof(char)*INPUTSIZE);      //定義本体用バッファ初期化
+  if(args==null){                                 //argsがnullなら
+    args=malloc(sizeof(char[])*1);                //１つだけ要素を持たせる
+    args[0]=null;                                 //先頭をnull
+    def=getDef(macroname,args);                   //定義本体取得
+    int n=searchdef(macroname);                   //マクロ名を探索
+    if(strCmp(def,deftable[n].mdefinition)!=0)    //定義本体が同じなら
+      do_error("マクロ名が２重定義されている");        //２重定義エラー
+    return 0;                                     //正常終了
+  }
+  def=getDef(macroname,args);                     //定義本体取得
+  if(def==null){                                  //定義本体がないなら
+    linenum=linenum-1;                            //定義本体があった行に戻る
+    do_error("定義本体が存在しない");                //定義本体が存在しない
   }
   int i=0;
-  int cnt=1;                                    //()の数
-  if(def[0]=='('){                              //定義本体の先頭が'('なら
-    for(i=1;def[i]!='\0';i=i+1){                //定義本体の終わりまでループ
-      if(def[i]=='(')                           //'('があったら
-        cnt=cnt+1;                              //カウントを加算
-      else if(def[i]==')')                      //')'があったら
-        cnt=cnt-1;                              //カウントを減算
-      if(cnt==0)                                //カウントが0なら
-        break;                                  //ループを抜ける
+  int cnt=1;                                      //()の数
+  if(def[0]=='('){                                //定義本体の先頭が'('なら
+    for(i=1;def[i]!='\0';i=i+1){                  //定義本体の終わりまでループ
+      if(def[i]=='(')                             //'('があったら
+        cnt=cnt+1;                                //カウントを加算
+      else if(def[i]==')')                        //')'があったら
+        cnt=cnt-1;                                //カウントを減算
+      if(cnt==0)                                  //カウントが0なら
+        break;                                    //ループを抜ける
     }
-    if(def[i+1]!='\0'){                         //定義本体の最後までいっていないなら
-      linenum=linenum-1;                        //定義本体があった行に戻る
-      do_error("()の数があっていない");            //()の数エラー
+    if(def[i+1]!='\0'){                           //定義本体の最後までいっていないなら
+      linenum=linenum-1;                          //定義本体があった行に戻る
+      do_error("()の数があっていない");              //()の数エラー
     }
   }
-  else{                                         //定義本体の先頭が'('でないなら
-    linenum=linenum-1;                          //定義本体があった行に戻る
-    do_error("#Edefineの定義本体には(...)が必要"); //Edefineの仕様に反するエラー
+  else{                                           //定義本体の先頭が'('でないなら
+    linenum=linenum-1;                            //定義本体があった行に戻る
+    do_error("#Edefineの定義本体には(...)が必要");   //Edefineの仕様に反するエラー
   }
-  if(makedef(macroname,def)==-1){               //定義本体の登録
-    linenum=linenum-1;                          //定義本体があった行に戻る
-    do_error("定義本体登録不可");                 //定義本体の登録不可エラー
+  if(makedef(macroname,def)==-1){                 //定義本体の登録
+    linenum=linenum-1;                            //定義本体があった行に戻る
+    do_error("定義本体登録不可");                    //定義本体の登録不可エラー
   }
-  return 0;                                     //正常終了
+  return 0;                                       //正常終了
 }
 
 
 
 //#Sdefineを見つけた
 int do_Sdefine(){
-  char[][] args;                                //引数用二次元配列
-  args=do_makeMname();                          //do_makeMname()を呼び出す
-  char[] def=malloc(sizeof(char)*INPUTSIZE);    //定義本体用バッファ
-  def=getDef(macroname,args);                   //定義本体取り出し
-  if(def==null){                                //定義本体がないなら
-    linenum=linenum-1;                          //定義本体があった行に戻る
-    do_error("定義本体が存在しない");              //定義本体がないエラー
+  char[][] args;                                  //引数用二次元配列
+  args=do_makeMname();                            //do_makeMname()を呼び出す
+  char[] def=malloc(sizeof(char)*INPUTSIZE);      //定義本体用バッファ
+  if(args==null){                                 //argsがnullなら
+    args=malloc(sizeof(char[])*1);                //１つだけ要素を持たせる
+    args[0]=null;                                 //先頭をnull
+    def=getDef(macroname,args);                   //定義本体取得
+    int n=searchdef(macroname);                   //マクロ名を探索
+    if(strCmp(def,deftable[n].mdefinition)!=0)    //定義本体が同じなら
+      do_error("マクロ名が２重定義されている");        //２重定義エラー
+    return 0;                                     //正常終了
   }
-  if(def[0]=='(' && def[strLen(def)-1]==')')    //定義本体が()で閉じられているなら
+  def=getDef(macroname,args);                     //定義本体取得
+  if(def==null){                                  //定義本体がないなら
+    linenum=linenum-1;                            //定義本体があった行に戻る
+    do_error("定義本体が存在しない");                //定義本体がないエラー
+  }
+  if(def[0]=='(' && def[strLen(def)-1]==')')      //定義本体が()で閉じられているなら
     do_error("#Sdefineの定義本体は()で閉じてはいけない");//#Sdefineの記述エラー
-  if(makedef(macroname,def)==-1){               //定義本体の登録
-    linenum=linenum-1;                          //定義本体があった行に戻る
-    do_error("定義本体登録不可");                 //定義本体登録不可エラー
+  if(makedef(macroname,def)==-1){                 //定義本体の登録
+    linenum=linenum-1;                            //定義本体があった行に戻る
+    do_error("定義本体登録不可");                    //定義本体登録不可エラー
   }
-  return 0;                                     //正常終了
+  return 0;                                       //正常終了
 }
 
 
@@ -666,7 +707,10 @@ void lineoutput(){
 //#includeを見つけた
 int do_include(){
   int type;                                               //単語タイプ
+  int psp=0;                                              //path配列のスタックポインタ
   char[] includename=malloc(sizeof(char)*INCLUDENAME);    //includeのファイル名
+  char[] pathname=malloc(sizeof(char)*INCLUDENAME);       //path付きファイル名用
+  includename=strCpy(includename,"\0");                   //クリア
 
   type=skipspace();                                       //スペースをスキップ
   if(type==T_MOJI){                                       //"..."なら
@@ -678,7 +722,6 @@ int do_include(){
     includename=strCat(includename,"\0");                 //'\0'追加
   }
   else if(word[0]=='<'){                                  //<...>なら
-    includename=strCpy(includename,"/usr/local/cmmInclude/");//パスを先頭に記述
     lexical();                                            //単語取得
     while(word[0]!='>'){                                  //'>'までループ
       includename=strCat(includename,word);               //ファイル名として追加
@@ -696,9 +739,22 @@ int do_include(){
     while(strCmp(word,"\n")!=0)                           //改行でない間
       lexical();                                          //１単語取得
   }
+
   saveincdepth(linenum,byteh,bytel-1);                    //今のファイル名の読み込みバイト数と行数を保存
   isp=makeincdepth(includename);                          //includeのファイル名を登録
+  pathname=strCpy(pathname,includename);                  //pathnameにincludenameを代入
   fd=fopen(incdepth[isp].name,"r");                       //includeのファイル名でオープン
+  while(fd==null){                                        //ファイルが存在しない間
+    if(psp>=ipsp)                                         //path数を超えたら
+      break;                                              //ループを抜ける
+    deleteincdepth(pathname);                             //incdepthを削除
+    fclose(fd);                                           //ファイルをクローズ
+    pathname=strCpy(pathname,incpath[psp]);               //pathを追加
+    pathname=strCat(pathname,includename);                //ファイル名を追加
+    isp=makeincdepth(pathname);                           //includeのファイル名を登録
+    fd=fopen(incdepth[isp].name,"r");                     //includeのファイル名でオープン
+    psp=psp+1;                                            //pspを加算
+  }
   if(fd==null){                                           //ファイルが存在しない
     isp=isp-1;                                            //今のファイルにスタックポインタ移動
     linenum=linenum-1;                                    //行数を戻す
@@ -710,6 +766,7 @@ int do_include(){
   nexthch='\0';                                           //次の文字を初期化
   nextlch='\0';                                           //次の文字を初期化
   nextwch='\0';                                           //次の文字を初期化
+  eofflag=false;                                          //eofflagを念のためオフ
   lineoutput();                                           //ファイルの始まりを印字
   return 0;                                               //正常終了
 }
@@ -829,6 +886,74 @@ void output(){
 
 
 
+boolean eflag=false;                                                         //-E用のフラグ
+//-D -E -Iオプションの解析
+int option(int optionn,char[][] optionarg){
+  int i=0;
+  int j=0;
+  char[] dm;                                                                 //-Dオプションのマクロ名用
+  char[] dd;                                                                 //-Dオプションの定義本体用
+  char[] ii;                                                                 //-Iオプションのinclude path
+  for(i=1;i<optionn;i=i+1){                                                  //引数の数だけループ
+    for(j=0;optionarg[i][j]!='\0';j=j+1){                                    //引数の解析
+      if(optionarg[i][j]=='-'){                                              //１文字目が'-'なら
+        j=j+1;                                                               //次の文字
+        if(optionarg[i][j]=='D'){                                            //２文字目が'D'なら
+          j=j+1;                                                             //次の文字
+          dm=malloc(sizeof(char)*10);                                        //dmを初期化
+          int k=0;
+          for(k=0;optionarg[i][j]!='=' && optionarg[i][j]!='\0';k=k+1){      //'='または'\0'までループ
+            dm[k]=optionarg[i][j];                                           //マクロ名を取得
+            j=j+1;                                                           //次の文字
+          }
+          dm[k]='\0';                                                        //文字の終わり
+          makemacro(dm,0);                                                   //マクロ名の登録
+          if(optionarg[i][j]=='\0'){                                         //'\0'なら
+            makedef(dm,"\0");                                                //定義本体の登録
+            break;                                                           //次の引数へ
+          }
+          j=j+1;                                                             //次の文字
+          dd=malloc(sizeof(char)*10);                                        //ddを初期化
+          for(k=0;optionarg[i][j]!='\0';k=k+1){                              //終わりまでループ
+            dd[k]=optionarg[i][j];                                           //定義本体を取得
+            j=j+1;                                                           //次の文字
+          }
+          dd[k]='\0';                                                        //文字の終わり
+          makedef(dm,dd);                                                    //定義本体を登録
+          break;
+        }
+        else if(optionarg[i][j]=='E'){                                       //２文字目が'E'なら
+          if(optionarg[i][j+1]!='\0')                                        //次の文字が終わりじゃないなら
+            break;                                                           //次の引数へ
+          eflag=true;                                                        //eflagをオン
+          op=stdout;                                                         //opを標準出力に
+          break;
+        }
+        else if(optionarg[i][j]=='I'){                                       //２文字目が'I'なら
+          j=j+1;                                                             //次の文字
+          ii=malloc(sizeof(char)*INCLUDENAME);                               //iiを初期化
+          int k=0;
+          for(k=0;optionarg[i][j]!='\0';k=k+1){                              //'\0'までループ
+            ii[k]=optionarg[i][j];                                           //マクロ名を取得
+            j=j+1;                                                           //次の文字
+          }
+          ii[k]='/';                                                         //ファイルの区切り
+          ii[k+1]='\0';                                                      //文字の終わり
+          incpath[ipsp]=ii;                                                  //pathを代入
+          ipsp=ipsp+1;                                                       //ipspを加算
+          break;
+        }
+        else                                                                 //'D' 'E'以外なら
+          break;                                                             //次の引数
+      }
+      else                                                                   //１文字目が'-'でないなら
+        return i;                                                            //引数位置を返す
+    }
+  }
+  return -1;                                                                 //-1を返す
+}
+
+
 public int main(int argc,char[][] argv){
   char[] bufer;                               //マクロ展開時用バッファ
   char[] opname;                              //出力ファイル名
@@ -838,11 +963,17 @@ public int main(int argc,char[][] argv){
   int type;                                   //字句解析タイプ
   int condition;                              //条件のコンディション
 
-  isp=makeincdepth(argv[1]);                  //ソースファイルをテーブルに追加
+  incpath=malloc(sizeof(char[])*PATHNUM);     //path配列の初期化
+  int oo=option(argc,argv);                   //option()を呼び出す
+  if(oo==-1)                                  //ooが-1なら
+    do_error("引数にファイルがない");            //エラー出力
+  isp=makeincdepth(argv[oo]);                 //ソースファイルをテーブルに追加
   fd=fopen(incdepth[isp].name,"r");           //入力ファイルオープン
-  opname=dotdelete(argv[1]);                  //出力ファイル名の'.'以前を取得
-  opname=strCat(opname,".i\0");               //出力ファイル名作成
-  op=fopen(opname,"w");                       //出力ファイルオープン
+  if(!eflag){                              //elseflagがオフなら
+    opname=dotdelete(argv[oo]);               //出力ファイル名の'.'以前を取得
+    opname=strCat(opname,".i\0");             //出力ファイル名作成
+    op=fopen(opname,"w");                     //出力ファイルオープン
+  }
   lineoutput();                               //ファイルの始まり
 
   char[][] subarg;                            //引数用２次元配列
@@ -868,19 +999,19 @@ public int main(int argc,char[][] argv){
           submacro=word;                      //マクロ名を保持
           if(deftable[n].narg!=0){            //引数を持つなら
             subarg=getArg();                  //引数を取得
-            if(narg!=deftable[n].narg)        //引数の数が合わないなら
-              do_error("マクロに引数がない");    //引数の数が合わないエラー
           }
           else                                //引数を持たないなら
             subarg=null;                      //nullにする
           ipbuf=replacedef(submacro,subarg);  //bufferにマクロを展開
+          if(ipbuf==null)                     //ipbufがnullなら
+            do_error("マクロの引数数が合わない"); //引数の数が合わないエラー
         }
         output();                             //文字印字
       }
       else if(type==T_DEFINE){                //#defineなら
         lexflag=false;                        //lexflagをオフ
         do_define();                          //do_define()を呼び出し
-        output();                             //文字位置
+        output();                             //文字印字
       }
       else if(type==T_EDEFINE){               //#Edefineなら
         lexflag=false;                        //lexflagをオフ

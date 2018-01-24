@@ -1,0 +1,49 @@
+#include "condition.hmm"
+#include <stdlib.hmm>
+
+int ifelsp=-1;
+
+public int makeif(boolean con){
+  ifelsp=ifelsp+1;
+  iftable[ifelsp]=malloc(sizeof(ifelse));
+  iftable[ifelsp].ifflag=true;
+  iftable[ifelsp].elseflag=false;
+  iftable[ifelsp].condition=con;
+  return ifelsp;
+}
+
+public int makeelse(){
+  if(!iftable[ifelsp].ifflag || ifelsp==0)
+    return -1;
+  iftable[ifelsp].ifflag=false;
+  if(iftable[ifelsp].condition || iftable[ifelsp].elseflag){
+    iftable[ifelsp].condition=false;
+  }
+  else{
+    iftable[ifelsp].condition=true;
+  }
+  iftable[ifelsp].elseflag=false;
+  return ifelsp;
+}
+
+public int makeelseif(boolean con){
+  if(!iftable[ifelsp].ifflag || ifelsp==0)
+    return -1;
+  if(iftable[ifelsp].elseflag)
+    iftable[ifelsp].condition=false;
+  else{
+    if(iftable[ifelsp].condition)
+      iftable[ifelsp].condition=false;
+    else{
+      iftable[ifelsp].condition=con;
+      iftable[ifelsp].elseflag=con;
+    }
+  }
+  return ifelsp;
+}
+
+public int deleteifel(){
+  free(iftable[ifelsp]);
+  ifelsp=ifelsp-1;
+  return ifelsp;
+}

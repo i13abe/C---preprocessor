@@ -4,7 +4,6 @@
 #include <stdlib.hmm>
 #include <ctype.hmm>
 
-#define TABLESIZE 20     //マクロ登録テーブルの大きさ
 #define DEFSIZE 50       //定義本体のサイズ
 
 int depth=0;             //マクロの登録の深さ
@@ -43,10 +42,10 @@ public char[] replacedef(char[] macro,char[][] arg){
 
 
     while(deftable[n].mdefinition[defn]!='\0'){
-      if(isAlnum(deftable[n].mdefinition[defn]) || deftable[n].mdefinition[defn]=='.'){
+      if(isAlnum(deftable[n].mdefinition[defn]) || deftable[n].mdefinition[defn]=='.' || deftable[n].mdefinition[defn]=='_'){
         wordn=wordn+1;
         if(wordn==sublist.nchar){
-          while(isAlnum(deftable[n].mdefinition[defn]) || deftable[n].mdefinition[defn]=='.'){
+          while(isAlnum(deftable[n].mdefinition[defn]) || deftable[n].mdefinition[defn]=='.' || deftable[n].mdefinition[defn]=='_'){
             defn=defn+1;
           }
 
@@ -71,7 +70,7 @@ public char[] replacedef(char[] macro,char[][] arg){
             sublist=sublist.next;
         }
         else{
-          while(isAlnum(deftable[n].mdefinition[defn]) || deftable[n].mdefinition[defn]=='.'){
+          while(isAlnum(deftable[n].mdefinition[defn]) || deftable[n].mdefinition[defn]=='.' || deftable[n].mdefinition[defn]=='_'){
             retbuf[bufn]=deftable[n].mdefinition[defn];
             defn=defn+1;
             bufn=bufn+1;
@@ -123,7 +122,6 @@ public int searchdef(char[] macro){
 
 public int makemacro(char[] macro,int narg){
   if(searchdef(macro)!=-1){
-    //マクロ名重複エラー処理
     return -1;
   }
   deftable[depth]=malloc(sizeof(definition));
