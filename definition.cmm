@@ -42,10 +42,10 @@ public char[] replacedef(char[] macro,char[][] arg){
 
 
     while(deftable[n].mdefinition[defn]!='\0'){
-      if(isAlnum(deftable[n].mdefinition[defn]) || deftable[n].mdefinition[defn]=='.' || deftable[n].mdefinition[defn]=='_'){
+      if(isAlnum(deftable[n].mdefinition[defn]) || deftable[n].mdefinition[defn]=='.' || deftable[n].mdefinition[defn]=='_' || deftable[n].mdefinition[defn]=='\'' || deftable[n].mdefinition[defn]=='\"'){
         wordn=wordn+1;
         if(wordn==sublist.nchar){
-          while(isAlnum(deftable[n].mdefinition[defn]) || deftable[n].mdefinition[defn]=='.' || deftable[n].mdefinition[defn]=='_'){
+          while(isAlnum(deftable[n].mdefinition[defn]) || deftable[n].mdefinition[defn]=='.' || deftable[n].mdefinition[defn]=='_' || deftable[n].mdefinition[defn]=='\'' || deftable[n].mdefinition[defn]=='\"'){
             defn=defn+1;
           }
 
@@ -70,7 +70,7 @@ public char[] replacedef(char[] macro,char[][] arg){
             sublist=sublist.next;
         }
         else{
-          while(isAlnum(deftable[n].mdefinition[defn]) || deftable[n].mdefinition[defn]=='.' || deftable[n].mdefinition[defn]=='_'){
+          while(isAlnum(deftable[n].mdefinition[defn]) || deftable[n].mdefinition[defn]=='.' || deftable[n].mdefinition[defn]=='_' || deftable[n].mdefinition[defn]=='\'' || deftable[n].mdefinition[defn]=='\"'){
             retbuf[bufn]=deftable[n].mdefinition[defn];
             defn=defn+1;
             bufn=bufn+1;

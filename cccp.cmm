@@ -37,7 +37,7 @@ int ipsp=0;                                     //incpathのスタックポイ�
 
 //エラー強制終了
 void do_error(char[] ers){
-  printf("%s:line %d:",incdepth[isp].name,linenum);     //エラーファイル名と行番号出力
+  printf("error:%s:line %d:",incdepth[isp].name,linenum);//エラーファイル名と行番号出力
   puts(ers);                                            //エラーを出力
   exit(1);                                              //強制終了
 }
@@ -400,10 +400,10 @@ int lexical(){
     else if(strCmp(word,"ifndef")==0){            //"#ifndef"なら
       return T_IFNDEF;                            //T_IFNDEFを返す
     }
-    else if(strCmp(word,"elseifdef")==0){         //"#elseifdef"なら
+    else if(strCmp(word,"elifdef")==0){           //"#elseifdef"なら
       return T_ELSEIFDEF;                         //T_ELSEIFDEFを返す
     }
-    else if(strCmp(word,"elseifndef")==0){        //"#elseifndef"なら
+    else if(strCmp(word,"elifndef")==0){          //"#elseifndef"なら
       return T_ELSEIFNDEF;                        //T_ELSEIFNDEFを返す
     }
     else if(strCmp(word,"endif")==0){             //"#endif"なら
@@ -505,6 +505,48 @@ char[][] getArg(){
 
 
 
+//前後のスペースを削除
+char[] deletespace(char[] s){
+  int i=0;
+  int j=0;
+  int bn=0;
+  char[] ret=malloc(sizeof(char)*strLen(s));
+  for(i=0;s[i]==' ';i=i+1){
+  }
+  for(j=i;s[j]!=' ' && s[j]!='\0';j=j+1){
+    ret[bn]=s[j];
+    bn=bn+1;
+  }
+  ret[bn]='\0';
+  return ret;
+}
+
+
+
+//マクロの引数を取得する
+//スペースは削除
+char[][] getArgforM(){
+  char[][] args;
+  int narg=0;
+  args=malloc(sizeof(char[])*ARGSIZE);            //引数配列の初期化
+
+  lexical();                                      //単語取得
+  if(strCmp(word,"(")==0){                        //単語が'('なら
+    args[narg]=deletespace(lexarg());             //１つ引数を取得
+    narg=narg+1;                                  //引数数を加算
+    while(strCmp(word,",")==0){                   //現在単語が','である間
+      args[narg]=deletespace(lexarg());           //引数を取得
+      narg=narg+1;                                //引数数を加算
+    }
+    if(strCmp(word,")")!=0)                       //単語が')'でないなら
+      do_error("マクロの引数の記述が正しくない");      //引数が正しく終わっていないエラー
+  }
+  args[narg]=null;                                //引数配列の終わりをnullにする
+  return args;                                    //引数配列を返す
+}
+
+
+
 //定義本体の取得
 //定義本体の引数の位置やマクロ名の入子を処理する
 //返り値は定義本体
@@ -516,6 +558,7 @@ char[] getDef(char[] mname,char[][] arg){
 
   skipspace();                                    //スペースをスキップ
 
+  buffer=strCpy(buffer,"\0");                     //初期化
   while(word[0]!='\n'){                           //改行までループ
     int i=0;
     for(i=0;arg[i]!=null;i=i+1){                  //引数と同じかどうかのループ
@@ -545,9 +588,9 @@ char[] getDef(char[] mname,char[][] arg){
     lexical();                                    //単語取得
     wordn=wordn+1;                                //単語の出現番号を加算
   }
-  buffer=strCat(buffer,"\0");                     //bufferに'\0'を代入
   if(strCmp(buffer,"\0")==0)                      //bufferが空なら
     return null;                                  //nullを返す
+  buffer=strCat(buffer,"\0");                     //bufferに'\0'を代入
   return buffer;                                  //bufferを返す
 }
 
@@ -568,8 +611,8 @@ char[][] do_makeMname(){
   macroname=word;                                 //マクロ名を保持
 
   if(type==T_OTHER){                              //文字タイプがただの文字なら
-    if(isAlpha(word[0])){                         //マクロ名の最初の文字がアルファベットなら
-      args=getArg();                              //引数を取得
+    if(isAlpha(word[0]) || word[0]=='_'){         //マクロ名の最初の文字がアルファベットなら
+      args=getArgforM();                          //引数を取得
       int i=0;
       for(i=0;args[i]!=null;i=i+1){               //引数の数だけループ
         if(!isAlpha(args[i][0]))                  //引数の最初の文字がアルファベットでないなら
@@ -605,10 +648,16 @@ int do_define(){
       do_error("マクロ名が２重定義されている");        //２重定義エラー
     return 0;                                     //正常終了
   }
-  def=getDef(macroname,args);                     //定義本体取得
+  if(strCmp(word,"\n")!=0)                        //マクロ名のすぐ後が改行でないなら
+    def=getDef(macroname,args);                   //定義本体取得
+  else                                            //マクロ名のすぐ後が改行なら
+    def=null;                                     //定義本体をnull
   if(def==null){                                  //定義本体がないなら
-    linenum=linenum-1;                            //定義本体があった行に戻る
-    do_error("定義本体が存在しない");                //定義本体が存在しない
+    if(makedef(macroname,"\0")==-1){              //定義本体の登録
+      linenum=linenum-1;                          //定義本体があった行に戻る
+      do_error("定義本体登録不可");                  //定義本体の登録不可エラー
+    }
+    return 0;                                     //正常終了
   }
   if(makedef(macroname,def)==-1){                 //定義本体の登録
     linenum=linenum-1;                            //定義本体があった行に戻る
@@ -633,7 +682,10 @@ int do_Edefine(){
       do_error("マクロ名が２重定義されている");        //２重定義エラー
     return 0;                                     //正常終了
   }
-  def=getDef(macroname,args);                     //定義本体取得
+  if(strCmp(word,"\n")!=0)                        //マクロ名のすぐ後が改行でないなら
+    def=getDef(macroname,args);                   //定義本体取得
+  else                                            //マクロ名のすぐ後が改行なら
+    def=null;                                     //定義本体をnull
   if(def==null){                                  //定義本体がないなら
     linenum=linenum-1;                            //定義本体があった行に戻る
     do_error("定義本体が存在しない");                //定義本体が存在しない
@@ -681,7 +733,10 @@ int do_Sdefine(){
       do_error("マクロ名が２重定義されている");        //２重定義エラー
     return 0;                                     //正常終了
   }
-  def=getDef(macroname,args);                     //定義本体取得
+  if(strCmp(word,"\n")!=0)                        //マクロ名のすぐ後が改行でないなら
+    def=getDef(macroname,args);                   //定義本体取得
+  else                                            //マクロ名のすぐ後が改行なら
+    def=null;                                     //定義本体をnull
   if(def==null){                                  //定義本体がないなら
     linenum=linenum-1;                            //定義本体があった行に戻る
     do_error("定義本体が存在しない");                //定義本体がないエラー
@@ -732,10 +787,10 @@ int do_include(){
     do_error("#includeは<...>または\"...\"");              //includeの記述に反するエラー
   }
 
-  lexical();                                              //１単語取得
+  skipspace();                                            //空白を飛ばす
   if(strCmp(word,"\n")!=0){                               //改行でないなら
     lexical();                                            //１単語取得
-    do_error("余計な単語がある");                            //#includeの記述に反するwarning
+    printf("worning:%s:line %d:余計な単語がある",incdepth[isp].name,linenum);//#includeの記述に反するwarning
     while(strCmp(word,"\n")!=0)                           //改行でない間
       lexical();                                          //１単語取得
   }
@@ -1084,7 +1139,7 @@ public int main(int argc,char[][] argv){
     }
   }
   if(sp!=0)                                   //#if #elseの数が0でない
-    do_error("#endの数が合わない");             //#endの数が合わない
+    do_error("#endifの数が合わない");           //#endifの数が合わない
   fclose(fd);                                 //入力ファイルをクローズ
   fclose(op);
   return 0;
