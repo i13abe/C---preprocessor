@@ -9,7 +9,7 @@
 
 #define INPUTSIZE 50                            //単語のマックスサイズ
 #define ARGSIZE 5                               //マクロの引数数。内一つはnull用
-#define TABLESIZE 50                            //definitionテーブルのサイズ
+#define TABLESIZE 200                            //definitionテーブルのサイズ
 #define INDEPTHSIZE 10                          //includeの入れ子サイズ
 #define INCLUDENAME 50                          //includeのファイル名の大きさ
 #define PATHNUM 5                               //pathの保持数
@@ -126,7 +126,8 @@ char getL(){
 
 int enterhcnt=0;                      // /*~*/の中の改行の数
 char nexthch='\0';                    //getH()用の次文字
-boolean sentense=false;               //"..."または'x'用のフラグ
+boolean sentense=false;               //"..."用のフラグ
+boolean sentensec=false;              //'x'用のフラグ
 boolean backflag=false;               //'\\'用のフラグ
 boolean backsent=false;               //'\"'と'\''用のフラグ
 
@@ -143,15 +144,21 @@ char getH(){
 
   hch=getL();                         //今の文字取得
 
-  if(hch=='\"' || hch=='\''){         //今の文字が'\"'または'\''なら
+  if(hch=='\"'){                      //今の文字が'\"'なら
     if(!sentense)                     //sentenseがオンでないなら
       sentense=true;                  //sentenseをオン
-    else{
+    else
       sentense=false;                 //sentenseをオフ
-    }
   }
 
-  if(sentense)                        //sentenseがオンなら
+  if(hch=='\''){                      //今の文字が'\''なら
+    if(!sentensec)                    //sentensecがオンでないなら
+      sentensec=true;                 //sentensecをオン
+    else
+      sentensec=false;                //sentensecをオフ
+  }
+
+  if(sentense || sentensec)           //sentenseまたはsentensecがオンなら
     return hch;                       //そのまま今の文字を返す
 
   while(hch=='/'){                    //今の文字が'/'なら
@@ -225,16 +232,26 @@ char getWord(){
 
   nextwch=getH();                                                   //次の文字取得
 
-  if(sentense && nextwch!='\"'){                                    //sentenseがオンで最初の'\'"でない
-    if(nextwch!='\''){                                              //最初の'\''でない
+  if(sentense && nextwch!='\"'){                                    //sentenseがオンで最初の'\"'でない
       backflag=false;                                               //backflagをオフ
       backsent=false;                                               //backsentをオフ
+      sentensec=false;                                              //sentensecをオフ
       if(wch=='\\' && nextwch=='\\'){                               //"\\"という表記なら
         backflag=true;                                              //backflagをオン
       }
       wordflag=true;                                                //wordflagをオン
       return wch;                                                   //今の文字を返す
-    }
+  }
+
+  if(sentensec && nextwch!='\''){                                   //sentensecがオンで最初の'\''でない
+      backflag=false;                                               //backflagをオフ
+      backsent=false;                                               //backsentをオフ
+      sentense=false;                                               //sentenseをオフ
+      if(wch=='\\' && nextwch=='\\'){                               //"\\"という表記なら
+        backflag=true;                                              //backflagをオン
+      }
+      wordflag=true;                                                //wordflagをオン
+      return wch;                                                   //今の文字を返す
   }
 
   if(isAlnum(wch) || wch=='.' || wch=='_'){                         //今の文字が 0~9 a~z A~Z '.' '_'のどれかなら
@@ -243,7 +260,7 @@ char getWord(){
     if(!isAlnum(nextwch) && nextwch!='.' && nextwch!='_'){          //次の文字が記号なら
       if(nextwch=='\"' && !sentense)                                //終わりの'\"'なら
         wordflag=true;                                              //wordflagをオン
-      else if(nextwch=='\'' && !sentense)                           //終わりの'\''なら
+      else if(nextwch=='\'' && !sentensec)                          //終わりの'\''なら
         wordflag=true;                                              //wordflagをオン
       else                                                          //始まりの'\"'なら
         wordflag=false;                                             //wordflagをオフ
@@ -273,6 +290,18 @@ char getWord(){
       else                                                          //backsentがオフなら
         wordflag=false;                                             //wordflagをオフ
   }
+  else if(wch=='\''){                                               //今の文字が'\''なら
+    linehead=false;                                                 //lineheadをオフ
+    if(sentensec)                                                   //sentenseがオンなら
+      wordflag=true;                                                //wordflagをオン
+    else                                                            //sentenseがオフなら
+      if(backsent){                                                 //backsentがオンなら
+        wordflag=true;                                              //wordflagをオン
+        backsent=false;                                             //backsentをオフ
+      }
+      else                                                          //backsentがオフなら
+        wordflag=false;                                             //wordflagをオフ
+  }
   else if(wch=='\\' && nextwch=='\"'){                             //"\""という表記なら
     if(backflag){                                                  //backflagがオンなら
       if(sentense)                                                 //sentenseがオンなら
@@ -292,18 +321,18 @@ char getWord(){
   }
   else if(wch=='\\' && nextwch=='\''){                              //"\'"という表記なら
     if(backflag){                                                   //backflagがオンなら
-      if(sentense)                                                  //sentenseがオンなら
+      if(sentensec)                                                 //sentenseがオンなら
         wordflag=false;                                             //wordflagをオフ
       else                                                          //sentenseがオフなら
         wordflag=true;                                              //wordflagをオン
     }
     else{                                                           //backflagがオフなら
       backsent=true;                                                //backsentをオン
-      if(sentense)                                                  //sentenseがオンなら
-        sentense=false;                                             //sentenseをオフ
+      if(sentensec)                                                 //sentenseがオンなら
+        sentensec=false;                                            //sentenseをオフ
       else{                                                         //sentenseがオフなら
         wordflag=true;                                              //wordflagをオフ
-        sentense=true;                                              //sentenseをオン
+        sentensec=true;                                             //sentenseをオン
       }
     }
   }
@@ -311,7 +340,7 @@ char getWord(){
     linehead=false;                                                 //lineheadをオフ
     if(nextwch=='\"' && !sentense)                                  //終わりの'\"'なら
       wordflag=true;                                                //wordflagをオン
-    else if(nextwch=='\'' && !sentense)                             //終わりの'\''なら
+    else if(nextwch=='\'' && !sentensec)                            //終わりの'\''なら
       wordflag=true;                                                //wordflagをオン
     else                                                            //始まりの'\"'なら
       wordflag=false;                                               //wordflagをオフ
@@ -437,6 +466,7 @@ int skipspace(){
 
 
 char[][] getArg();
+boolean naflag=false;                             //引数が空フラグ
 //引数用字句解析
 //引数の場合" "や()の数を保存するため、字句解析を分けた
 char[] lexarg(){
@@ -498,6 +528,11 @@ char[][] getArg(){
     if(strCmp(word,")")!=0)                       //単語が')'でないなら
       do_error("マクロの引数の記述が正しくない");      //引数が正しく終わっていないエラー
   }
+  if(strCmp(args[0],"\0")==0){                    //()があるが引数が空
+    if(narg!=1)                                   //引数数が1でない
+      do_error("引数の数が合わない");                //エラー出力
+    narg=0;                                       //引数数を0
+  }
   args[narg]=null;                                //引数配列の終わりをnullにする
   argspace=false;                                 //argspaceをオフ
   return args;                                    //引数配列を返す
@@ -528,6 +563,7 @@ char[] deletespace(char[] s){
 char[][] getArgforM(){
   char[][] args;
   int narg=0;
+  naflag=false;                                   //引数空フラグをオフ
   args=malloc(sizeof(char[])*ARGSIZE);            //引数配列の初期化
 
   lexical();                                      //単語取得
@@ -540,6 +576,12 @@ char[][] getArgforM(){
     }
     if(strCmp(word,")")!=0)                       //単語が')'でないなら
       do_error("マクロの引数の記述が正しくない");      //引数が正しく終わっていないエラー
+    if(strCmp(args[0],"\0")==0){                  //()があるが引数が空
+      if(narg!=1)                                 //引数数が1でない
+        do_error("引数が書かれていない");            //エラー出力
+      narg=0;                                     //引数数を0
+      naflag=true;                                //引数が空フラグをオン
+    }
   }
   args[narg]=null;                                //引数配列の終わりをnullにする
   return args;                                    //引数配列を返す
@@ -597,7 +639,6 @@ char[] getDef(char[] mname,char[][] arg){
 
 
 char[] macroname;                                 //マクロ名
-
 //マクロ名を登録する前の前処理
 //返り値はマクロの引数の多次元配列
 char[][] do_makeMname(){
@@ -615,10 +656,10 @@ char[][] do_makeMname(){
       args=getArgforM();                          //引数を取得
       int i=0;
       for(i=0;args[i]!=null;i=i+1){               //引数の数だけループ
-        if(!isAlpha(args[i][0]))                  //引数の最初の文字がアルファベットでないなら
+        if(!isAlpha(args[i][0]))                  //引数の最初の文字がアルファベットまたは空でないなら
           do_error("マクロの引数の名前はアルファベットから");//引数名不可エラー
       }
-      if(makemacro(macroname,i)==-1)              //マクロ名の登録
+      if(makemacro(macroname,i,naflag)==-1)       //マクロ名の登録
         return null;                              //マクロがすでに定義されていたらnullを返す
     }
     else{                                         //マクロ名の最初がアルファベットでないなら
@@ -962,7 +1003,7 @@ int option(int optionn,char[][] optionarg){
             j=j+1;                                                           //次の文字
           }
           dm[k]='\0';                                                        //文字の終わり
-          makemacro(dm,0);                                                   //マクロ名の登録
+          makemacro(dm,0,false);                                             //マクロ名の登録
           if(optionarg[i][j]=='\0'){                                         //'\0'なら
             makedef(dm,"\0");                                                //定義本体の登録
             break;                                                           //次の引数へ
@@ -1035,7 +1076,7 @@ public int main(int argc,char[][] argv){
   char[] submacro;                            //マクロ名
   sp=makeif(true);                            //0番目は常にtrue
 
-  while(!feof(fd)){                           //入力ファイルから単語を読み込み
+  while(!eofflag){                            //入力ファイルから単語を読み込み
     type=lexical();                           //入力の単語のタイプ
     if(word[0]=='#'){                         //'#'を見つけたなら
       lexflag=true;                           //lexflagをオン
@@ -1052,7 +1093,7 @@ public int main(int argc,char[][] argv){
         int n=searchdef(word);                //マクロ名を探索
         if(n!=-1){                            //マクロ名なら
           submacro=word;                      //マクロ名を保持
-          if(deftable[n].narg!=0){            //引数を持つなら
+          if(deftable[n].narg!=0 || deftable[n].noargflag){//引数を持つまたは引数が空なら
             subarg=getArg();                  //引数を取得
           }
           else                                //引数を持たないなら
@@ -1122,7 +1163,7 @@ public int main(int argc,char[][] argv){
       do_endif();                             //do_endif()呼び出し
     }
 
-    if(feof(fd) && isp!=0){                   //今見ているファイルがeofでincludeテーブルのスタックポインタが１番下でないなら
+    if(eofflag && isp!=0){                   //今見ているファイルがeofでincludeテーブルのスタックポインタが１番下でないなら
       fclose(fd);                             //今見ているファイルをクローズ
       isp=deleteincdepth(incdepth[isp].name); //includeテーブルを１つ削除
       fd=fopen(incdepth[isp].name,"r");       //前のファイルをオープン
