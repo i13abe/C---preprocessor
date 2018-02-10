@@ -1,0 +1,14 @@
+
+
+struct ifelse{
+  boolean ifflag;
+  boolean elseflag;
+  boolean condition;
+};
+
+public ifelse[] iftable;
+
+public int makeif(boolean con);
+public int makeelse();
+public int makeelseif(boolean con);
+public int deleteifel();
