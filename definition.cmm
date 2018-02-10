@@ -28,9 +28,10 @@ public char[] replacedef(char[] macro,char[][] arg){
     int i=0;
     //引数の数があっているか確認
     for(i=0;i<deftable[n].narg;i=i+1){
-      if(arg[i]==null)
+      if(arg[i]==null){
         //引数が足りないエラー
         return null;
+      }
     }
 
     reflist sublist=deftable[n].pattern;   //臨時のリストに格納
@@ -120,13 +121,15 @@ public int searchdef(char[] macro){
   return -1;    //マクロ名なし
 }
 
-public int makemacro(char[] macro,int narg){
+public int makemacro(char[] macro,int narg,boolean naflag){
   if(searchdef(macro)!=-1){
     return -1;
   }
   deftable[depth]=malloc(sizeof(definition));
-  deftable[depth].name=macro;
+  deftable[depth].name=malloc(sizeof(char)*strLen(macro)+1);
+  deftable[depth].name=strCpy(deftable[depth].name,macro);
   deftable[depth].narg=narg;
+  deftable[depth].noargflag=naflag;
   deftable[depth].pattern=null;
   deftable[depth].mdefinition=null;
   depth=depth+1;
@@ -193,6 +196,7 @@ public int makedef(char[] macro,char[] def){
   if(n==-1)
     return -1;
 
-  deftable[n].mdefinition=def;  //定義本体の登録
+  deftable[n].mdefinition=malloc(sizeof(char)*strLen(def)+1);  //定義本体の登録
+  deftable[n].mdefinition=strCpy(deftable[n].mdefinition,def);
   return  0;
 }
