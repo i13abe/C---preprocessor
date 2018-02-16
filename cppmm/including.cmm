@@ -25,6 +25,7 @@ public int makeincdepth(char[] fname){
 
 public int deleteincdepth(char[] fname){
   if(strCmp(fname,incdepth[ifsp].name)==0){
+    free(incdepth[ifsp].name);
     free(incdepth[ifsp]);
     ifsp=ifsp-1;
     return ifsp;

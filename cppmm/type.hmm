@@ -13,3 +13,4 @@
 #define T_ERROR 11
 #define T_OTHER 12
 #define T_MOJI 13
+#define T_DEFINE 14

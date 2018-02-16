@@ -898,6 +898,7 @@ int do_include(){
   }
 
   saveincdepth(linenum,byteh,bytel-1);                    //今のファイル名の読み込みバイト数と行数を保存
+  fclose(fd);
   isp=makeincdepth(includename);                          //includeのファイル名を登録
   pathname=strCpy(pathname,includename);                  //pathnameにincludenameを代入
   fd=fopen(incdepth[isp].name,"r");                       //includeのファイル名でオープン

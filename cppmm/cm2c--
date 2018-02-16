@@ -1,0 +1,95 @@
+#!/bin/sh
+
+function error {
+  eval  "$@"
+  rm -f ${tmps}
+  exit 1
+}
+
+INCDIR=/usr/local/cmmInclude
+LIBDIR=/usr/local/cmmLib
+
+CFLAGS="-g -O0 \
+   -funsigned-char -Wno-parentheses-equality -Wno-tautological-compare \
+   -Wno-pointer-sign -Wno-int-conversion -Wno-unused-value -Wno-unsequenced \
+   -Wno-dangling-else -include stdio.h -include ${LIBDIR}/wrapper.h"
+
+CPPFLAGS="-xc++ -nostdinc -DC"
+
+myname=`basename $0`
+exefile="a.out"
+sflag="no"
+cflag="no"
+eflag="no"
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -o) exefile=$2;  shift; shift;;
+        -S) sflag="yes"; shift;;
+        -c) cflag="yes"; shift;;
+        -E) eflag="yes"; shift;;
+        -D*)flg=`echo $1 | sed -e 's/"/\\\\"/g'`
+            CPPFLAGS="${CPPFLAGS} \"${flg}\""; shift;;
+        -*) echo  "\"${myname}\" is the C-- compiler driver."     1>&2
+            echo  "syntax: ${myname} [switches] <c-- source> ..." 1>&2
+            echo  "     switches are :"                           1>&2
+            echo  "       -o exec  executable file name"          1>&2
+            echo  "       -S       leave .c file"                 1>&2
+            echo  "       -c       leave .o file"                 1>&2
+            echo  "       -E       run the preprocessor stage"    1>&2
+            echo  "       -Dxx=yy  define xx as yy"               1>&2
+            echo  "       -h       print this message"            1>&2
+            exit 1;;
+        *)  break;;     # terminate while loop
+    esac
+done
+
+
+if [ $# -le 0 ]; then
+    echo "${myname} : no input files."                            1>&2
+    exit 1
+fi
+
+objs=""
+tmps=""
+while [ $# -gt 0 ]; do
+    j=`basename $1`
+    name=`expr "${j}" : '\(.*\)\.[^.]*'`
+    ext=`expr "${j}" : '.*\(\.[^.]*\)'`
+    case "${ext}" in
+        *.cmm)
+            if [ "${eflag}" == "yes" ]; then
+                eval cpp-- -E -DC -I${INCDIR} -I${LIBDIR} $1 || error
+            else
+                eval cpp-- -DC -I${INCDIR} -I${LIBDIR} $1 || error rm ${name}.i
+                c-c-- -O ${name}.i > ${name}.c || error rm ${name}.i ${name}.c
+                rm ${name}.i
+
+                if [ "${sflag}" != "yes" ]; then
+                    objs="${objs} ${name}.o"
+                    tmps="${tmps} ${name}.o"
+                    cc -c ${CFLAGS} -I${LIBDIR} ${name}.c || error rm ${name}.c
+                    rm -f ${name}.c
+                fi
+            fi ;;
+        *.c)
+            if [ "${eflag}" != "yes" -a "${sflag}" != "yes" ]; then
+                objs="${objs} ${name}.o"
+                tmps="${tmps} ${name}.o"
+                cc -c ${CFLAGS} -I${LIBDIR} ${name}.c || error
+            fi ;;
+        *.o)
+            objs="${objs} ${name}.o" ;;
+        *)
+            echo "${myname} : ${j} : illegal extension." 1>&2
+            rm -f ${tmps}
+            exit 1;;
+    esac
+    shift
+done
+
+if [ "${eflag}" != "yes" -a "${sflag}" != "yes" -a "${cflag}" != "yes" ]; then
+    cc ${CFLAGS} -o ${exefile} -I${LIBDIR} ${LIBDIR}/wrapper.c ${objs} 
+    rm -f ${tmps}
+fi
+
+exit 0

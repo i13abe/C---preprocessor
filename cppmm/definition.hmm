@@ -10,6 +10,7 @@ struct reflist{
 struct definition{
   char[] name;
   int narg;
+  boolean noargflag;
   char[] mdefinition;
   reflist pattern;
 };
@@ -18,7 +19,7 @@ public definition[] deftable;
 
 public char[] replacedef(char[] macro,char[][] arg);
 public int searchdef(char[] macro);
-public int makemacro(char[] macro,int narg);
+public int makemacro(char[] macro,int narg,boolean naflag);
 public int deletedef(char[] macro);
 public int makelist(char[] macro,int argn,int nchar);
 public int makedef(char[] macro,char[] def);

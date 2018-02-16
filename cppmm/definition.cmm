@@ -4,7 +4,7 @@
 #include <stdlib.hmm>
 #include <ctype.hmm>
 
-#define DEFSIZE 50       //定義本体のサイズ
+#define DEFSIZE 100       //定義本体のサイズ
 
 int depth=0;             //マクロの登録の深さ
 
@@ -139,6 +139,8 @@ public int makemacro(char[] macro,int narg,boolean naflag){
 public int deletedef(char[] macro){
   int n=searchdef(macro);
   if(n!=-1){
+    free(deftable[n].name);
+    free(deftable[n].mdefinition);
     free(deftable[n]);
     int i=0;
     depth=depth-1;
